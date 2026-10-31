@@ -1,9 +1,12 @@
+import platform
 import time
 from pathlib import Path
 import shutil, os
 import zipfile
-from videotrans.configure.config import  tr, logger,  app_cfg
-from videotrans.configure.contants import FASTER_MODELS_DICT
+
+from videotrans.configure._paths import ROOT_DIR
+from videotrans.configure.config import tr, logger, app_cfg
+from videotrans.configure.constants import FASTER_MODELS_DICT
 from urllib.parse import urlparse
 import threading
 import tqdm
@@ -13,6 +16,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 全局锁对象防止同时下载模型，避免文件冲突或限流
 download_lock = threading.Lock()
+max_retries = 10  # 最大重试次数
+retry_delay = 5  # 失败后等待几秒重试
 
 """解析URL获取纯净文件名 (去除 ?query)"""
 
@@ -40,7 +45,7 @@ def file_exists(dirname, glob_patter='*.bin') -> bool:
 _original_http_get = None
 
 
-def check_and_down_hf(model_id, repo_id, local_dir, callback=None, allow_list=None,token=None) -> bool:
+def check_and_down_hf(model_id, repo_id, local_dir, callback=None, allow_list=None, token=None) -> bool:
     Path(local_dir).mkdir(exist_ok=True, parents=True)
     global _original_http_get
     from .help_misc import is_connect_hf
@@ -131,19 +136,30 @@ def check_and_down_hf(model_id, repo_id, local_dir, callback=None, allow_list=No
             with download_lock:
                 if callback:
                     callback(f'starting downloading {model_id}...')
-                logger.debug(f'获取到下载锁，开始从 hf下载 {repo_id}')
-                huggingface_hub.snapshot_download(
-                    repo_id=repo_id,
-                    local_dir=local_dir,
-                    # local_dir_use_symlinks=False,
-                    endpoint=os.environ.get('HF_ENDPOINT'),
-                    tqdm_class=QtAwareTqdm if callback else None,
-                    local_files_only=False,
-                    # max_workers=1,
-                    ignore_patterns=["*.msgpack", "*.h5", ".git*", "*.md"],
-                    token=token,
-                    allow_patterns=allow_list
-                )
+                logger.debug(f'获取到下载锁，开始从 hf 下载 {repo_id}')
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        huggingface_hub.snapshot_download(
+                            repo_id=repo_id,
+                            local_dir=local_dir,
+                            endpoint=os.environ.get('HF_ENDPOINT'),
+                            tqdm_class=QtAwareTqdm if callback else None,
+                            local_files_only=False,
+                            # max_workers=1,
+                            ignore_patterns=["*.msgpack", "*.h5", ".git*", "*.md","*.gguf","*.nemo"],
+                            token=token,
+                            allow_patterns=allow_list
+                        )
+                        break  # 下载成功，跳出循环
+                    except Exception as e:
+                        logger.exception(f"下载中断{attempt=}: {e}", exc_info=True)
+                        if attempt < max_retries:
+                            if callback:
+                                callback(f"{tr('Please wait')}{retry_delay}s  {tr('Retry failed')}[{attempt}]...")
+                            time.sleep(retry_delay)
+                        else:
+                            logger.error(f'重试下载 {attempt} 次仍失败')
+                            raise
 
         junk_paths = [
             ".cache",
@@ -165,7 +181,7 @@ def check_and_down_hf(model_id, repo_id, local_dir, callback=None, allow_list=No
                     logger.exception(f"清理临时文件失败：{junk} {e}", exc_info=True)
     except Exception as e:
         from videotrans.configure.excepts import DownloadModelsError
-        raise DownloadModelsError(tr("download model error"))
+        raise DownloadModelsError(tr("hf_model error", local_dir, f'https://huggingface.co/{repo_id}/tree/main')) from e
     finally:
         hf_fd.http_get = _original_http_get
     return True
@@ -175,7 +191,6 @@ def check_and_down_hf(model_id, repo_id, local_dir, callback=None, allow_list=No
 # 如果是 http开头，则直接使用
 def down_file_from_hf(local_dir, urls=None, callback=None) -> bool:
     Path(local_dir).mkdir(parents=True, exist_ok=True)
-    max_retries = 10
     from .help_misc import is_connect_hf
     from videotrans.configure.excepts import DownloadModelsError
     import requests
@@ -277,8 +292,6 @@ def down_zip(local_dir, zip_url, callback=None) -> bool:
     Path(local_dir).mkdir(parents=True, exist_ok=True)
     from videotrans.configure.excepts import DownloadModelsError
     import requests
-    max_retries = 10
-
     proxy = None
     # modelscope.cn 阿里魔塔不使用代理
     if 'modelscope.cn' not in zip_url:
@@ -387,7 +400,9 @@ def down_zip(local_dir, zip_url, callback=None) -> bool:
 # 从 modelscope.cn 下载完整模型
 # 优先加载本地模型，失败则在线下载
 _orig_download_file_lists = None
-def check_and_down_ms(model_id, callback=None, local_dir=None,allow_patterns=None) -> bool:
+
+
+def check_and_down_ms(model_id, callback=None, local_dir=None, allow_patterns=None) -> bool:
     global _orig_download_file_lists
     import modelscope.hub.snapshot_download as ms_sd
     if not _orig_download_file_lists:
@@ -443,13 +458,38 @@ def check_and_down_ms(model_id, callback=None, local_dir=None,allow_patterns=Non
             with download_lock:
                 if callback:
                     callback(f'starting downloading {model_id}...')
-                logger.debug(f'获取到下载锁，开始从 ms 下载 {model_id}')
-            snapshot_download(model_id=model_id, progress_callbacks=[Pro], local_dir=local_dir,allow_patterns=allow_patterns)
+                logger.debug(f'获取到下载锁，开始从 modelscope.cn 下载 {model_id}')
+            snapshot_download(model_id=model_id, progress_callbacks=[Pro], local_dir=local_dir,
+                              allow_patterns=allow_patterns)
         else:
             return True
     except Exception as e:
         from videotrans.configure.excepts import DownloadModelsError
-        raise DownloadModelsError(tr("download model error") + f'{e}')
+        raise DownloadModelsError(
+            tr("hf_model error", local_dir, f'https://modelscope.cn/models/{model_id}/files')) from e
     finally:
         ms_sd._download_file_lists = _orig_download_file_lists
+    return True
+
+
+# 下载 audio_cpp
+
+def down_audiocpp_bin(process_callback=None):
+    _os=platform.system()
+    cli_name="audiocpp_cli.exe" if _os=='Windows' else 'audiocpp_cli'
+    p=Path(f'{ROOT_DIR}/audio_cpp/{cli_name}')
+    if p.exists():return True
+    if _os=='Linux' and not p.exists():
+        raise RuntimeError(tr("The audio.cpp binary file does not exist",f'{ROOT_DIR}/audio_cpp','audiocpp_cli','https://github.com/0xShug0/audio.cpp/releases'))
+
+    from videotrans.configure.constants import AUDIO_CPP_MAC_MS,AUDIO_CPP_WIN_MS,AUDIO_CPP_WIN_HF,AUDIO_CPP_MAC_HF
+
+    urls={
+        "Darwin":{"ms":AUDIO_CPP_MAC_MS,"hf":AUDIO_CPP_MAC_HF},
+        "Windows":{"ms":AUDIO_CPP_WIN_MS,"hf":AUDIO_CPP_WIN_HF}
+    }
+    from .help_misc import is_connect_hf
+    is_con=is_connect_hf()
+    if not p.exists():
+        down_zip(f'{ROOT_DIR}/audio_cpp', urls[_os]['hf']  if is_con else urls[_os]['ms'], callback=process_callback)
     return True

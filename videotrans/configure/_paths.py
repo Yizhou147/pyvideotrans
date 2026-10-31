@@ -4,20 +4,21 @@ import sys
 import tempfile
 from pathlib import Path
 
-from videotrans.configure.contants import no_proxy
+
 
 IS_FROZEN = True if getattr(sys, 'frozen', False) else False
 SYS_TMP = Path(tempfile.gettempdir()).as_posix()
 ROOT_DIR = Path(sys.executable).parent.as_posix() if IS_FROZEN else Path(__file__).parent.parent.parent.as_posix()
 TEMP_ROOT = f'{ROOT_DIR}/tmp'
 LOGS_DIR = f'{ROOT_DIR}/logs'
-TEMP_DIR = f'{TEMP_ROOT}/None'
+
 TRANSLATE_CACHE = f'{TEMP_ROOT}/translate_cache'
 DUBBING_CACHE = f'{TEMP_ROOT}/dubbing_cache'
 
 # 单视频模式时重新进行配音，队列数据文件和停止标识文件
 REDUBB_QUEUE_FILE=f'{TEMP_ROOT}/redubbing.json'
 REDUBB_STATUS_FILE=f'{TEMP_ROOT}/stopredubbing.pid'
+IPC_STATUS_FILE=f'{TEMP_ROOT}/exit.pid'
 
 Path(f"{ROOT_DIR}/models").mkdir(parents=True, exist_ok=True)
 Path(f"{ROOT_DIR}/logs").mkdir(parents=True, exist_ok=True)
@@ -50,6 +51,7 @@ def fix_ssl_cert_env():
 
 
 def _set_env():
+    from videotrans.configure.constants import no_proxy
     if IS_FROZEN:
         os.environ['TQDM_DISABLE'] = '1'
     os.environ['no_proxy'] = no_proxy
@@ -58,6 +60,8 @@ def _set_env():
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
     os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
     os.environ["CT2_VERBOSE"] = "1"
+    os.environ["CT2_CUDA_ALLOW_BF16"] = "1"
+    os.environ["CT2_CUDA_ALLOW_FP16"] = "1"
     os.environ["OMP_NUM_THREADS"] = "1"
     os.environ["PYTHONWARNINGS"]="ignore"
     os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
@@ -67,11 +71,12 @@ def _set_env():
     os.environ['MODELSCOPE_CACHE'] = ROOT_DIR + "/models"
     os.environ['HF_HOME'] = ROOT_DIR + "/models"
     os.environ['PYANNOTE_CACHE'] = ROOT_DIR + "/models"
+    os.environ['PKUSEG_HOME'] = ROOT_DIR + "/models/pkuser_home"
     os.environ['HF_HUB_CACHE'] = ROOT_DIR + "/models"
     os.environ['HF_TOKEN_PATH'] = ROOT_DIR + "/models/hf_token.txt"
     os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = 'true'
-    os.environ['HF_HUB_DOWNLOAD_TIMEOUT'] = "3600"
-    os.environ['HF_HUB_ETAG_TIMEOUT'] = "30"
+    os.environ['HF_HUB_DOWNLOAD_TIMEOUT'] = "120"
+    os.environ['HF_HUB_ETAG_TIMEOUT'] = "120"
     os.environ["HF_HUB_DISABLE_XET"] = "1"
     os.environ['GRADIO_ANALYTICS_ENABLED'] = '0'
     # 必须在 import requests, modelscope 等库之前执行！

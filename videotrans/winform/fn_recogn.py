@@ -1,8 +1,9 @@
 
 
 def openwin():
-
-    from videotrans.util.help_misc import hide_show_element, show_error
+    from videotrans.translator import LANGNAME_DICT,LLM_CONCERT_DICT
+    from videotrans.winform import get_cls
+    from videotrans.util.help_misc import  show_error
     from typing import List
     from videotrans.task.taskcfg import InputFile
     import sys
@@ -15,7 +16,10 @@ def openwin():
     from videotrans.configure import config
     from videotrans.task.taskcfg import TaskCfgSTT
     from videotrans import translator, recognition
-    from videotrans.component.set_form import Recognform
+
+
+    langnamelist = list(LANGNAME_DICT.values())
+
 
 
     RESULT_DIR = HOME_DIR + f"/recogn"
@@ -70,7 +74,9 @@ def openwin():
         winobj.shibie_language.setDisabled(state)
         winobj.is_cuda.setDisabled(state)
         winobj.shibie_recogn_type.setDisabled(state)
-        winobj.shibie_model.setDisabled(state)
+        _recogn_type=winobj.shibie_recogn_type.currentIndex()
+        winobj.shibie_model.setDisabled(True if state or _recogn_type not in recognition.ALLOW_CHANGE_MODEL else False)
+        
         winobj.out_format.setDisabled(state)
         winobj.shibie_opendir.setDisabled(state)
         winobj.shibie_startbtn.setDisabled(state)
@@ -89,7 +95,7 @@ def openwin():
         uuid_list = []
         Path(config.TEMP_DIR).mkdir(parents=True, exist_ok=True)
         winobj.has_done = False
-        model = winobj.shibie_model.currentText()
+        model = winobj.shibie_model.currentText().strip()
         recogn_type = winobj.shibie_recogn_type.currentIndex()
         if recogn_type == recognition.Faster_Whisper_XXL and not show_xxl_select():
             return
@@ -102,36 +108,32 @@ def openwin():
         if not files or len(files) < 1:
             return show_error(tr('bixuyinshipin'))
         
-        langcode=winobj.shibie_language.currentText()
-        if langcode==tr('auto'):
+        langtext=winobj.shibie_language.currentText()
+        if langtext==tr('auto'):
             langcode='auto'
         else:
-            langcode = translator.get_audio_code(show_source=langcode)
+            langcode = translator.get_audio_code(show_source=langtext)
             is_allow_lang_res = recognition.is_allow_lang(langcode=langcode, recogn_type=recogn_type, model_name=model)
             winobj.loglabel.setText(is_allow_lang_res if is_allow_lang_res is not True else '')
         # 判断是否填写自定义识别api openai-api识别、zh_recogn识别信息
         if recognition.is_input_api(recogn_type=recogn_type) is not True:
             return
 
-        if winobj.rephrase.currentIndex() == 1:
-            ai_type = settings.get('llm_ai_type', 'openai')
-            if ai_type in ['openai','chatgpt'] and not params.get('chatgpt_key'):
-                show_error(tr('llmduanju'))
-                from videotrans.winform import chatgpt
-                chatgpt.openwin()
+        if winobj.rephrase.isChecked():
+            ai_type = settings.get('llm_ai_type', 1)
+            ai_dict=LLM_CONCERT_DICT[ai_type]
+            api_key=params.get(ai_dict['api_key_name'])
+            if not api_key:
+                show_error(tr('llmduanju',ai_dict['name']))
                 return
-            if ai_type == 'deepseek' and not params.get('deepseek_key'):
-                show_error(tr('llmduanjudp'))
-                from videotrans.winform import deepseek
-                deepseek.openwin()
-                return
+
         enable_diariz_is = winobj.enable_diariz.isChecked()
 
         toggle_state(True)
         winobj.shibie_startbtn.setText(tr("running"))
         winobj.label_shibie10.setText('')
         winobj.shibie_text.clear()
-        stt_rephrase = int(winobj.rephrase.currentIndex())
+        stt_rephrase = winobj.rephrase.isChecked()
         settings.save()
         from videotrans.util.help_ffmpeg import format_video
         try:
@@ -257,9 +259,8 @@ def openwin():
             show_error(winobj.error_msg)
 
 
-    winobj = Recognform()
-    app_cfg.child_forms['fn_recogn'] = winobj
 
+    winobj = get_cls(Path(__file__).stem)()
     def _bind():
         from videotrans.component.component import DropButton
         winobj.shibie_dropbtn = DropButton(tr('xuanzeyinshipin'))
@@ -271,9 +272,9 @@ def openwin():
         winobj.shibie_dropbtn.setMinimumSize(0, 150)
         winobj.shibie_widget.insertWidget(0, winobj.shibie_dropbtn)
 
-        winobj.shibie_language.addItems([tr('auto')]+list(translator.LANGNAME_DICT.values()))
+        winobj.shibie_language.addItems(langnamelist)
         winobj.is_cuda.setChecked(params.get("stt_cuda", False))
-        winobj.rephrase.setCurrentIndex(int(params.get('stt_rephrase', 2)))
+        winobj.rephrase.setChecked(bool(params.get('stt_rephrase', False)))
         winobj.remove_noise.setChecked(bool(params.get('stt_remove_noise')))
         winobj.copysrt_rawvideo.setChecked(params.get('stt_copysrt_rawvideo', False))
         winobj.spk_insert.setChecked(bool(params.get('stt_spk_insert', True)))

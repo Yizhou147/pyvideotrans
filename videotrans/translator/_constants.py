@@ -1,3 +1,13 @@
+from videotrans.configure.config import tr
+from videotrans import ChannelProvider
+
+"""
+如果想新增渠道
+1. 定义一个常量，值为以下递增的序号
+2. 在 ID_NAME_DICT 中新增一个键值对，键为新增的常量，值是 ChannelProvider 实例
+3. 当前目录下定义一个实际实现代码文件，可直接复制已有渠道文件
+"""
+
 GOOGLE_INDEX = 0
 MICROSOFT_INDEX = 1
 M2M100_INDEX = 2
@@ -14,7 +24,7 @@ OPENROUTER_INDEX = 10
 SILICONFLOW_INDEX = 11
 AI302_INDEX = 12
 
-QWENMT_INDEX = 13
+BAILIAN_INDEX = 13
 ZIJIE_INDEX = 14
 
 XIAOMI_INDEX = 15
@@ -31,15 +41,23 @@ TENCENT_INDEX = 23
 TRANSAPI_INDEX = 24
 
 LITELLM_INDEX = 25
+API_ROUTE_INDEX = 26
+CHEAPERINFERENCE_INDEX = 27
+INFISTAR_INDEX = 28
+ATLASCLOUD_INDEX = 29
+OPPER_INDEX = 30
+RUNCRATE_INDEX = 31
+CLOUDGPU_INDEX = 32
 
+# AI 翻译渠道
 AI_TRANS_CHANNELS = [
+    API_ROUTE_INDEX,
     LITELLM_INDEX,
     CHATGPT_INDEX,
     LOCALLLM_INDEX,
     ZIJIE_INDEX,
     AZUREGPT_INDEX,
     GEMINI_INDEX,
-    QWENMT_INDEX,
     AI302_INDEX,
     ZHIPUAI_INDEX,
     SILICONFLOW_INDEX,
@@ -48,5 +66,168 @@ AI_TRANS_CHANNELS = [
     MINIMAX_INDEX,
     XIAOMI_INDEX,
     HYMT2_INDEX,
-    CAMB_INDEX
+    CAMB_INDEX,
+    CHEAPERINFERENCE_INDEX,
+    INFISTAR_INDEX,
+    ATLASCLOUD_INDEX,
+    OPPER_INDEX,
+    RUNCRATE_INDEX,
+    CLOUDGPU_INDEX
 ]
+# 渠道id对应的设置窗口和sk键名,
+# key_name: 存储 SK 或 api url的键，通过 app_cfg.params 调用，如果不存在该值，在使用时报错未填写
+# win: 对应 winform 包中的文件名及 ui 包中的文件名，用于调用打开设置窗口
+# imp 为该渠道实际代码文件，位于当前目录下
+
+ID_NAME_DICT = {
+    GOOGLE_INDEX: ChannelProvider(tr('Google'),
+                                  imp="._google"),
+    MICROSOFT_INDEX: ChannelProvider(tr('Microsoft'),
+                                     imp="._microsoft"),
+    M2M100_INDEX: ChannelProvider(f'M2M100({tr("Built-in")})',
+                                  imp="._m2m100"),
+    HYMT2_INDEX: ChannelProvider(f'Hy-MT2-1.8B({tr("Built-in")})',
+                                 imp="._hymt2"),
+
+    CHATGPT_INDEX: ChannelProvider(tr('OpenAI ChatGPT'),
+                                   key_name="chatgpt_key",
+                                   win="chatgpt",
+                                   imp="._chatgpt"),
+    DEEPSEEK_INDEX: ChannelProvider("DeepSeek",
+                                    key_name="deepseek_key",
+                                    win="deepseek",
+                                    imp="._deepseek"),
+    GEMINI_INDEX: ChannelProvider("Gemini AI",
+                                  key_name="gemini_key",
+                                  win="gemini",
+                                  imp="._gemini"),
+    ZHIPUAI_INDEX: ChannelProvider(tr('Zhipu AI'),
+                                   key_name="zhipuai_key",
+                                   win="zhipuai",
+                                   imp="._zhipuai"),
+    AZUREGPT_INDEX: ChannelProvider("Azure AI",
+                                    key_name="azure_key",
+                                    win="azure",
+                                    imp="._azure"),
+    LOCALLLM_INDEX: ChannelProvider(tr('Local LLM API'),
+                                    key_name="localllm_api",
+                                    win="localllm",
+                                    imp="._localllm"),
+
+    OPENROUTER_INDEX: ChannelProvider("OpenRouter",
+                                      key_name="openrouter_key",
+                                      win="openrouter",
+                                      imp="._openrouter"),
+    SILICONFLOW_INDEX: ChannelProvider(tr('SiliconFlow'),
+                                       key_name="siliconflow_key",
+                                       win="siliconflow",
+                                       imp="._siliconflow"),
+    AI302_INDEX: ChannelProvider("302.ai",
+                                 key_name="ai302_key",
+                                 win="ai302",
+                                 imp="._ai302"),
+
+    BAILIAN_INDEX: ChannelProvider(tr('Ali-Bailian'),
+                                  key_name="bailian_key",
+                                  win="bailian",
+                                  imp="._bailian"),
+    ZIJIE_INDEX: ChannelProvider(tr('VolcEngine LLM'),
+                                 key_name="zijiehuoshan_key",
+                                 win="zijiehuoshan",
+                                 imp="._huoshan"),
+
+    TENCENT_INDEX: ChannelProvider(tr('Tencent'),
+                                   key_name="tencent_key",
+                                   win="tencent",
+                                   imp="._tencent"),
+    BAIDU_INDEX: ChannelProvider(tr('Baidu'),
+                                 key_name="baidu_key",
+                                 win="baidu",
+                                 imp="._baidu"),
+    DEEPL_INDEX: ChannelProvider("DeepL",
+                                 key_name="deepl_key",
+                                 win="deepl",
+                                 imp="._deepl"),
+    DEEPLX_INDEX: ChannelProvider("DeepLx",
+                                  key_name="deeplx_api",
+                                  win="deeplx",
+                                  imp="._deeplx"),
+    ALI_INDEX: ChannelProvider(tr('Alibaba Machine Translation'),
+                               key_name="ali_key",
+                               win="ali",
+                               imp="._ali"),
+
+    LIBRE_INDEX: ChannelProvider(f"{tr('LibreTranslate')}({tr('Local')}API)",
+                                 key_name="libre_api",
+                                 win="libre",
+                                 imp="._libre"),
+    MINIMAX_INDEX: ChannelProvider("MiniMax AI",
+                                   key_name="minimaxi_key",
+                                   win="minimaxi",
+                                   imp="._minimaxi"),
+    XIAOMI_INDEX: ChannelProvider(tr("XiaoMi"),
+                                  key_name="xiaomi_key",
+                                  win="xiaomi",
+                                  imp="._xiaomi"),
+    CAMB_INDEX: ChannelProvider("CAMB.ai",
+                                key_name="camb_api_key",
+                                win="camb",
+                                imp="._camb"),
+    TRANSAPI_INDEX: ChannelProvider(tr('Customized API'),
+                                    key_name="transapi_url",
+                                    win="transapi",
+                                    imp="._transapi"),
+    LITELLM_INDEX: ChannelProvider("LiteLLM",
+                                   key_name="litellm_key",
+                                   win="litellm",
+                                   imp="._litellm"),
+    API_ROUTE_INDEX: ChannelProvider("API Route",
+                                     key_name="api_route_key",
+                                     win="api_route",
+                                     imp="._api_route"),
+    CHEAPERINFERENCE_INDEX: ChannelProvider("Cheaper Inference",
+                                            key_name="cheaperinference_key",
+                                            win="cheaperinference",
+                                            imp="._cheaperinference"),
+    INFISTAR_INDEX: ChannelProvider("Infistar",
+                                    key_name="infistar_key",
+                                    win="infistar",
+                                    imp="._infistar"),
+    ATLASCLOUD_INDEX: ChannelProvider("Atlas Cloud",
+                                      key_name="atlascloud_key",
+                                      win="atlascloud",
+                                      imp="._atlascloud"),
+    OPPER_INDEX: ChannelProvider("Opper",
+                                 key_name="opper_key",
+                                 win="opper",
+                                 imp="._opper"),
+    RUNCRATE_INDEX: ChannelProvider("Runcrate",
+                                    key_name="runcrate_key",
+                                    win="runcrate",
+                                    imp="._runcrate"),
+    CLOUDGPU_INDEX: ChannelProvider("CloudGPU",
+                                    key_name="cloudgpu_key",
+                                    win="cloudgpu",
+                                    imp="._cloudgpu"),
+}
+
+# 菜单--工具/选项--高级选项-通用设置--LLM纠错所用渠道的显示数据
+LLM_CONCERT_DICT = [
+    {"name": tr("OpenAI ChatGPT"), "api_key_name": "chatgpt_key", "id": CHATGPT_INDEX},
+    {"name": "DeepSeek", "api_key_name": "deepseek_key", "id": DEEPSEEK_INDEX},
+    {"name": "302.AI", "api_key_name": "ai302_key", "id": AI302_INDEX},
+    {"name": "Azure", "api_key_name": "azure_key", "id": AZUREGPT_INDEX},
+    {"name": tr("VolcEngine LLM"), "api_key_name": "zijiehuoshan_key", "id": ZIJIE_INDEX},
+    {"name": tr("Local LLM API"), "api_key_name": "localllm_api", "id": LOCALLLM_INDEX},
+    {"name": "MiniMax AI", "api_key_name": "minimaxi_key", "id": MINIMAX_INDEX},
+    {"name": "OpenRouter", "api_key_name": "openrouter_key", "id": OPENROUTER_INDEX},
+    {"name": tr("SiliconFlow"), "api_key_name": "siliconflow_key", "id": SILICONFLOW_INDEX},
+    {"name": tr("XiaoMi"), "api_key_name": "xiaomi_key", "id": XIAOMI_INDEX},
+    {"name": tr("Zhipu AI"), "api_key_name": "zhipuai_key", "id": ZHIPUAI_INDEX},
+    {"name": "API Route", "api_key_name": "api_route_key", "id": API_ROUTE_INDEX},
+    {"name": "Cheaper Inference", "api_key_name": "cheaperinference_key", "id": CHEAPERINFERENCE_INDEX},
+    {"name": "Infistar", "api_key_name": "infistar_key", "id": INFISTAR_INDEX},
+]
+
+ID_NAME_DICT = dict(sorted(ID_NAME_DICT.items(), key=lambda item: item[0]))
+TRANSLASTE_NAME_LIST = [it.name for it in ID_NAME_DICT.values()]

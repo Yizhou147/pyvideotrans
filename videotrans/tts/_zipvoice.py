@@ -4,7 +4,7 @@ from pathlib import Path
 
 from videotrans.configure._i18n import tr
 from videotrans.configure._paths import REDUBB_STATUS_FILE, REDUBB_QUEUE_FILE
-from videotrans.configure.contants import ZIPVOICE_URL_MS, ZIPVOICE_URL_HF
+from videotrans.configure.constants import ZIPVOICE_URL_MS, ZIPVOICE_URL_HF
 from videotrans.configure.excepts import DubbingSrtError
 from videotrans.configure.config import ROOT_DIR, app_cfg, logger,settings
 from videotrans.tts._base import BaseTTS
@@ -16,13 +16,12 @@ import librosa,time
 from videotrans.util.help_misc import vail_file, is_connect_hf
 
 
-@dataclass
+@dataclass(repr=False)
 class ZipVoice(BaseTTS):
 
     def __post_init__(self):
         super().__post_init__()
         self.speed = self.get_speed()
-        self.device = "cpu"  # todo cuda
         self.roledict = get_f5tts_role()
         self.local_dir=f'{ROOT_DIR}/models/zipvoice'
 
@@ -48,7 +47,7 @@ class ZipVoice(BaseTTS):
                 ),
                 debug=False,
                 num_threads=int(settings.get('noise_separate_nums', 4)),
-                provider=self.device,
+                provider='cpu'
             )
         )
         if not tts_config.validate():

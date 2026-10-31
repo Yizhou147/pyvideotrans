@@ -18,7 +18,7 @@ from videotrans.util._srt_parse import ms_to_time_string
 from videotrans.util.help_misc import vail_file
 
 
-@dataclass
+@dataclass(repr=False)
 class GoogleRecogn(BaseRecogn):
 
     @retry(retry=retry_if_not_exception_type(NO_RETRY_EXCEPT), stop=(stop_after_attempt(settings.get('retry_nums'))), wait=wait_fixed(2), before=before_log(logger, logging.INFO),  after=after_log(logger, logging.INFO))
@@ -83,7 +83,8 @@ class GoogleRecogn(BaseRecogn):
                 time.sleep(self.asr_wait)
         return self.raws
 
-    def match_target_amplitude(self, sound, target_dBFS):
+    @staticmethod
+    def match_target_amplitude(sound, target_dBFS):
         change_in_dBFS = target_dBFS - sound.dBFS
         return sound.apply_gain(change_in_dBFS)
 

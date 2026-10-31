@@ -3,24 +3,25 @@
 
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import Qt
-from videotrans.configure.config import tr, settings, params
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QDialog
+
+from videotrans.configure.config import tr, settings, params, ROOT_DIR
+from videotrans.configure.constants import SILICONFLOW_TTS_MODELS
 from videotrans.util.help_misc import open_url
 
 
-class Ui_siliconflowform(object):
-    def setupUi(self, siliconflowform):
+class Ui_siliconflow(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowIcon(QIcon(f"{ROOT_DIR}/videotrans/styles/icon.ico"))
+        self.setupUi(self)
+    def setupUi(self, form):
         self.has_done = False
-        siliconflowform.setObjectName("siliconflowform")
-        siliconflowform.setWindowModality(QtCore.Qt.NonModal)
-        siliconflowform.resize(600, 600)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(siliconflowform.sizePolicy().hasHeightForWidth())
-        siliconflowform.setSizePolicy(sizePolicy)
-        siliconflowform.setMaximumSize(QtCore.QSize(600, 600))
+        form.setObjectName("form")
+        form.resize(600, 600)
 
-        v1 = QtWidgets.QVBoxLayout(siliconflowform)
+        v1 = QtWidgets.QVBoxLayout(form)
 
         h3 = QtWidgets.QHBoxLayout()
         h4 = QtWidgets.QHBoxLayout()
@@ -31,13 +32,13 @@ class Ui_siliconflowform(object):
         self.label_0.setText(tr('SiliconFlow'))
         v1.addWidget(self.label_0)
 
-        self.label_3 = QtWidgets.QLabel(siliconflowform)
+        self.label_3 = QtWidgets.QLabel()
         self.label_3.setObjectName("label_3")
-        self.guiji_key = QtWidgets.QLineEdit(siliconflowform)
-        self.guiji_key.setMinimumSize(QtCore.QSize(0, 35))
-        self.guiji_key.setObjectName("guiji_key")
+        self.siliconflow_key = QtWidgets.QLineEdit()
+        self.siliconflow_key.setMinimumSize(QtCore.QSize(0, 35))
+        self.siliconflow_key.setObjectName("siliconflow_key")
         h3.addWidget(self.label_3)
-        h3.addWidget(self.guiji_key)
+        h3.addWidget(self.siliconflow_key)
         v1.addLayout(h3)
 
 
@@ -52,19 +53,41 @@ class Ui_siliconflowform(object):
 
         h_token.addWidget(label_token)
         h_token.addWidget(self.max_token)
+        
+
         v1.addLayout(h_token)
 
+        hreason = QtWidgets.QHBoxLayout()
+        hreason.addWidget(QtWidgets.QLabel(tr('Reasoning Effort')))
+        self.reasoning_effort=QtWidgets.QComboBox()
+        self.reasoning_effort.addItems(['default','none','low','medium','high','max'])
+        self.reasoning_effort.setToolTip(tr('none_effort'))
+        hreason.addWidget(self.reasoning_effort)
+        v1.addLayout(hreason)
 
         h_model = QtWidgets.QHBoxLayout()
-        self.label_selectmodel = QtWidgets.QLabel()
-        self.label_selectmodel.setObjectName("label_selectmodel")
-        self.label_selectmodel.setText(tr("Model"))
-        self.guiji_model = QtWidgets.QComboBox()
-        self.guiji_model.setMinimumSize(QtCore.QSize(0, 35))
-        self.guiji_model.setObjectName("guiji_model")
-        h_model.addWidget(self.label_selectmodel)
-        h_model.addWidget(self.guiji_model)
+        label_selectmodel = QtWidgets.QLabel()
+        label_selectmodel.setObjectName("label_selectmodel")
+        label_selectmodel.setText(tr('Text  Or Srt  Translation')+tr("Model"))
+        self.siliconflow_model = QtWidgets.QComboBox()
+        self.siliconflow_model.setMinimumSize(QtCore.QSize(0, 35))
+        self.siliconflow_model.setObjectName("siliconflow_model")
+        h_model.addWidget(label_selectmodel)
+        h_model.addWidget(self.siliconflow_model)
         v1.addLayout(h_model)
+
+
+        h_tts_model = QtWidgets.QHBoxLayout()
+        label_tts_selectmodel = QtWidgets.QLabel()
+        label_tts_selectmodel.setObjectName("label_tts_selectmodel")
+        label_tts_selectmodel.setText(tr('From  Text  Into  Speech')+tr("Model"))
+        self.siliconflow_tts_model = QtWidgets.QComboBox()
+        self.siliconflow_tts_model.addItems(SILICONFLOW_TTS_MODELS.strip().split(','))
+        self.siliconflow_tts_model.setMinimumSize(QtCore.QSize(0, 35))
+        self.siliconflow_tts_model.setObjectName("siliconflow_tts_model")
+        h_tts_model.addWidget(label_tts_selectmodel)
+        h_tts_model.addWidget(self.siliconflow_tts_model)
+        v1.addLayout(h_tts_model)
 
         self.label_allmodels = QtWidgets.QLabel()
         self.label_allmodels.setObjectName("label_allmodels")
@@ -76,16 +99,16 @@ class Ui_siliconflowform(object):
         self.edit_allmodels.setObjectName("edit_allmodels")
         v1.addWidget(self.edit_allmodels)
 
-        self.label_4 = QtWidgets.QLabel(siliconflowform)
+        self.label_4 = QtWidgets.QLabel()
         self.label_4.setObjectName("label_4")
 
-        self.template = QtWidgets.QPlainTextEdit(siliconflowform)
+        self.template = QtWidgets.QPlainTextEdit()
         self.template.setObjectName("template")
         self.template.setReadOnly(True)
         v1.addWidget(self.label_4)
         v1.addWidget(self.template)
 
-        self.set = QtWidgets.QPushButton(siliconflowform)
+        self.set = QtWidgets.QPushButton()
         self.set.setMinimumSize(QtCore.QSize(0, 35))
         self.set.setObjectName("set")
 
@@ -108,21 +131,26 @@ class Ui_siliconflowform(object):
         v1.addLayout(h4)
         self.template.setPlainText(tr("Prompt: Please open the {} file directly to modify it", 'siliconflow', 'siliconflow'))
 
-        self.retranslateUi(siliconflowform)
-        QtCore.QMetaObject.connectSlotsByName(siliconflowform)
+        self.retranslateUi(form)
+        QtCore.QMetaObject.connectSlotsByName(form)
 
     def update_ui(self):
-        allmodels_str = settings.get('guiji_model','')
-        allmodels = str(settings.get('guiji_model','')).split(',')
-        self.guiji_model.clear()
-        self.guiji_model.addItems(allmodels)
+        allmodels_str = settings.get('siliconflow_model','')
+        allmodels = [x.strip() for x in str(settings.get('siliconflow_model','')).split(',')]
+        self.siliconflow_model.clear()
+        self.siliconflow_model.addItems(allmodels)
         self.edit_allmodels.setPlainText(allmodels_str)
-        self.guiji_key.setText(str(params.get("guiji_key",'')))
-        self.guiji_model.setCurrentText(params.get("guiji_model",''))
-        self.max_token.setText(str(params.get("guiji_max_token",'')))
+        self.siliconflow_key.setText(str(params.get("siliconflow_key",'')))
+        self.max_token.setText(str(params.get("siliconflow_max_token",'')))
+        self.reasoning_effort.setCurrentText(params.get("siliconflow_reasoning_effort","default"))
+        if params.get("siliconflow_model"):
+            self.siliconflow_model.setCurrentText(params.get("siliconflow_model"))
+        if params.get("siliconflow_tts_model"):
+            self.siliconflow_tts_model.setCurrentText(params.get("siliconflow_tts_model"))
 
-    def retranslateUi(self, siliconflowform):
-        siliconflowform.setWindowTitle(tr("SiliconFlow"))
+
+    def retranslateUi(self, form):
+        form.setWindowTitle(tr("SiliconFlow"))
         self.label_3.setText(tr("SK"))
         self.label_4.setText(tr("{lang} represents the target language name, do not delete it."))
         self.set.setText(tr('Save'))

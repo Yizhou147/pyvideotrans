@@ -1,0 +1,66 @@
+# 语音识别，新进程执行
+# 返回元组
+# 失败：第一个值为False，则为失败，第二个值存储失败原因
+# 成功，第一个值存在需要的返回值，不需要时返回True，第二个值为None
+import json, traceback
+from pathlib import Path
+from videotrans.configure.config import logger
+
+
+def videasr_fun(
+        cut_audio_list=None,
+        logs_file=None,
+        local_dir=None,
+        model_name=None,
+        detect_language=None,
+        hotword=None,
+        **kw
+):
+
+    from videotrans.process._stt_utils import _write_log
+    from videotrans.util._srt_parse import ms_to_time_string
+    from transformers import AutoProcessor, VibeVoiceAsrForConditionalGeneration
+
+    raws=[]
+    try:
+        processor = AutoProcessor.from_pretrained(local_dir)
+        model = VibeVoiceAsrForConditionalGeneration.from_pretrained(local_dir, device_map=kw.get('device_name', 'auto'))
+        
+        srts = [item for item in json.loads(Path(cut_audio_list).read_text(encoding='utf-8'))]
+
+        msg = f'Load {model_name} running on {model.device}'
+        _write_log(logs_file, json.dumps({"type": "logs", "text": msg}))
+        logger.debug(f'QwenASR:{local_dir}，{msg}，{detect_language=}')
+        srts_chunk = [srts[i:i + 2] for i in range(0, len(srts), 2)]
+        for j, it_list in enumerate(srts_chunk):
+          inputs = processor.apply_transcription_request(
+              audio=[it['filename'] for it in it_list], 
+              prompt=[hotword for it in it_list]
+          ).to(model.device, model.dtype)
+          output_ids = model.generate(**inputs)
+          generated_ids = output_ids[:, inputs["input_ids"].shape[1] :]
+          dict_output_list = processor.decode(generated_ids, return_format="parsed")
+          for i,dict_output in enumerate(dict_output_list):
+            offset=it_list[i]['start_time']
+            for item in dict_output:
+              _s=offset+int(float(item['Start'])*1000)
+              _e=offset+int(float(item['End'])*1000)
+              _sraw=ms_to_time_string(ms=_s)
+              _eraw=ms_to_time_string(ms=_e)
+              t={
+                  "line":len(raws)+1,
+                  "text":item['Content'],
+                  "start_time": _s,
+                  "end_time":_e,
+                  "startraw":_sraw,
+                  "endraw":_eraw,
+                  "time":f'{_sraw} --> {_eraw}'
+              }
+              raws.append(t)
+              _write_log(logs_file, json.dumps({"type": "subtitle", "text": f"{t['text']}\n"}))
+                
+
+        return raws, None
+    except BaseException as e:
+        msg = traceback.format_exc()
+        return False, f'{e}:{msg}'

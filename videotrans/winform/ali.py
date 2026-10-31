@@ -1,22 +1,24 @@
 def openwin():
+    from videotrans.winform import get_cls
+    from pathlib import Path
     from videotrans.configure.config import tr,params,app_cfg
     from videotrans.util.TestSrtTrans import TestSrtTrans
     from videotrans.winform._helpers import make_feed_translator
-    from videotrans.component.set_form import AliForm
 
-    winobj = AliForm()
-    app_cfg.child_forms['ali'] = winobj
+
+    winobj = get_cls(Path(__file__).stem)()
 
     feed = make_feed_translator(winobj, "test")
 
     def test():
-        appid = winobj.ali_id.text()
-        miyue = winobj.ali_key.text()
+        appid = winobj.ali_id.text().strip()
+        miyue = winobj.ali_key.text().strip()
         if not appid or not miyue:
             from videotrans.util.help_misc import show_error
             return show_error(tr("Please input AccessKey ID and AccessKey Secret"))
         params["ali_id"] = appid
         params["ali_key"] = miyue
+        params.save()
         winobj.test.setText(tr("Testing..."))
         from videotrans import translator
         task = TestSrtTrans(parent=winobj, translator_type=translator.ALI_INDEX)
@@ -24,8 +26,8 @@ def openwin():
         task.start()
 
     def save():
-        params["ali_id"] = winobj.ali_id.text()
-        params["ali_key"] = winobj.ali_key.text()
+        params["ali_id"] = winobj.ali_id.text().strip()
+        params["ali_key"] = winobj.ali_key.text().strip()
         params.save()
         winobj.close()
 
@@ -35,4 +37,4 @@ def openwin():
         winobj.ali_key.setText(str(params.get("ali_key")))
     winobj.set.clicked.connect(save)
     winobj.test.clicked.connect(test)
-    winobj.show()
+    return winobj

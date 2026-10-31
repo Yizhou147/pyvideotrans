@@ -2,7 +2,8 @@
 
 
 def openwin():
-
+    from videotrans.translator import LANGNAME_DICT
+    from videotrans.winform import get_cls
     from videotrans.util.help_misc import show_glossary_editor, show_error, set_proxy
     from typing import List
     from videotrans.task.taskcfg import InputFile
@@ -13,7 +14,7 @@ def openwin():
     from PySide6.QtGui import QDesktopServices, QTextCursor, Qt
     from PySide6 import QtWidgets
     from PySide6.QtWidgets import QFileDialog, QPlainTextEdit
-    from videotrans.configure.config import tr,app_cfg,settings,params, HOME_DIR
+    from videotrans.configure.config import tr,app_cfg,settings,params, HOME_DIR,logger
     from videotrans.configure import config
     from videotrans.task.taskcfg import TaskCfgSTS
     from videotrans import translator
@@ -22,12 +23,14 @@ def openwin():
     SOURCE_DIR = RESULT_DIR
     uuid_list=[]
     percent=""
-    language_namelist = ["-"] + list(translator.LANGNAME_DICT.values())
+    # LANGNAME_DICT 支持的30多种语言+ EDGE 语言列表
+    language_namelist = list(LANGNAME_DICT.values())
 
     def toggle_state(state):
         winobj.fanyi_translate_type.setDisabled(state)
         winobj.fanyi_model_list.setDisabled(state)
         winobj.fanyi_source.setDisabled(state)
+        winobj.is_cuda.setDisabled(state)
         winobj.fanyi_target.setDisabled(state)
         winobj.out_format.setDisabled(state)
         winobj.aisendsrt.setDisabled(state)
@@ -111,13 +114,13 @@ def openwin():
         winobj.has_done = False
         target_language = winobj.fanyi_target.currentText()
         translate_type = winobj.fanyi_translate_type.currentIndex()
-        source_code, target_code = translator.get_source_target_code(show_source=winobj.fanyi_source.currentText(),
-                                                                     show_target=target_language,
-                                                                     translate_type=translate_type)
-       
-        if target_language == '-':
-            return show_error(tr("fanyimoshi1"))
-        
+        source_language_name=winobj.fanyi_source.currentText()
+
+        # 直接返回 LANG_CODE 的键通用代码作为标识，真实目标语言名称在  runner 入口获取
+        source_code,target_code=translator.get_code(source_language_name),translator.get_code(target_language)
+
+        logger.debug(f'{source_code=},{target_code=}')
+
 
         proxy = winobj.fanyi_proxy.text()
 
@@ -126,9 +129,8 @@ def openwin():
             set_proxy(proxy)
             settings['proxy'] = proxy
 
-        rs = translator.is_allow_translate(translate_type=translate_type, show_target=target_code)
-        if rs is not True:
-            return False
+        rs = translator.is_allow_translate(translate_type=translate_type, show_target=target_language)
+        winobj.loglabel.setText(rs if rs is not True else '')
         if len(winobj.files) < 1:
             return show_error(tr("Must import srt subtitle files"))
         winobj.fanyi_sourcetext.clear()
@@ -143,6 +145,7 @@ def openwin():
         uuid_list = [obj['uuid'] for obj in video_list]
         if winobj.save_source.isChecked():
             SOURCE_DIR = Path(video_list[0]['name']).parent.as_posix()
+        _is_cuda=winobj.is_cuda.isChecked()
         for it in video_list:
             app_cfg.rm_uuid(it['uuid'])
             it['target_dir']=SOURCE_DIR if SOURCE_DIR else RESULT_DIR
@@ -150,7 +153,8 @@ def openwin():
                 "translate_type": translate_type,
                 "uuid": it['uuid'],
                 "source_language_code": source_code,
-                "target_language_code": target_code
+                "target_language_code": target_code,
+                "is_cuda":_is_cuda
             }
             from videotrans.task.translate_srt import TranslateSrt
             trk = TranslateSrt(cfg=TaskCfgSTS(**cfg|it),out_format=winobj.out_format.currentIndex())
@@ -175,6 +179,7 @@ def openwin():
         params["trans_target_language"] = winobj.fanyi_target.currentIndex()
         params["trans_out_format"] = winobj.out_format.currentIndex()
         params["trans_save_source"] = winobj.save_source.isChecked()
+        params["trans_is_cuda"] = winobj.is_cuda.isChecked()
         params.save()
 
         toggle_state(True)
@@ -185,14 +190,16 @@ def openwin():
         if not t or t in ['-', 'No']:
             return
         # 判断翻译渠道是否支持翻译到该目标语言
-        if translator.is_allow_translate(translate_type=winobj.fanyi_translate_type.currentIndex(), show_target=t) is not True:
-            return
+        rs=translator.is_allow_translate(translate_type=winobj.fanyi_translate_type.currentIndex(), show_target=t)
+
+        winobj.loglabel.setText(rs if rs is not True else '')
+
 
 
     # 更新目标语言列表
     def update_target_language():        
         winobj.fanyi_target.clear()
-        winobj.fanyi_target.addItems(language_namelist)
+        winobj.fanyi_target.addItems(language_namelist[:-1])
         winobj.aisendsrt.setChecked(settings.get('aisendsrt'))
 
     # 翻译渠道变化时重新设置目标语言
@@ -286,18 +293,15 @@ def openwin():
         else:
             settings['aisendsrt'] = False
 
-    from videotrans.component.set_form import Fanyisrt
+    winobj = get_cls(Path(__file__).stem)()
 
-    winobj = Fanyisrt()
-    app_cfg.child_forms['fn_fanyisrt'] = winobj
-    #winobj.show()
     def _bind():
         Path(RESULT_DIR).mkdir(parents=True,exist_ok=True)
         winobj.fanyi_translate_type.addItems(translator.TRANSLASTE_NAME_LIST)
         winobj.fanyi_translate_type.setCurrentIndex(int(params.get('trans_translate_type', 0)))
 
         update_target_language()
-        winobj.fanyi_source.addItems(['-'] + list(translator.LANGNAME_DICT.values()))
+        winobj.fanyi_source.addItems(language_namelist)
         winobj.fanyi_import.clicked.connect(fanyi_import_fun)
         winobj.fanyi_start.clicked.connect(fanyi_start_fun)
         winobj.fanyi_stop.clicked.connect(pause_trans)
@@ -332,6 +336,7 @@ def openwin():
         winobj.glossary.clicked.connect(lambda: show_glossary_editor(winobj))
         winobj.aisendsrt.toggled.connect(checkbox_state_changed)
         winobj.save_source.setChecked(params.get("trans_save_source",False))
+        winobj.is_cuda.setChecked(params.get("trans_is_cuda",False))
 
     _bind()
     return winobj

@@ -1,12 +1,16 @@
+VERSION = "v4.17"
+VERSION_NUM = 417
+
 import importlib
 import inspect
 from dataclasses import dataclass
 from typing import Optional
+
+
 from videotrans.configure.config import logger
 
-VERSION = "v4.10"
-VERSION_NUM = 410
 _loaded_modules = {}
+
 
 @dataclass
 class ChannelProvider:
@@ -27,7 +31,8 @@ def get_class(channel_id: int = 0, provider_type=None, _ID_NAME_DICT=None):
         if not _module_map: raise RuntimeError(f'{provider_type} not exists Channel:{channel_id}')
         module = importlib.import_module(f'videotrans.{provider_type}{_module_map.imp}', __name__)
         for obj_name, obj in inspect.getmembers(module, inspect.isclass):
-            if obj.__module__ == module.__name__:
+            # 可能有多个子类，只加载 存在 _base_name的
+            if obj.__module__ == module.__name__ and getattr(obj,'_base_name')=='BaseCon':
                 _loaded_modules[_key] = obj
                 return obj
     except Exception as e:

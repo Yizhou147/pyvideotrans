@@ -9,12 +9,12 @@ from videotrans.configure.config import settings,logger,ROOT_DIR
 from videotrans.recognition._base import BaseRecogn
 from videotrans.task.taskcfg import SrtItem
 from videotrans.util._srt_parse import get_subtitle_from_srt
-from videotrans.configure.contants import FASTER_MODELS_DICT
+from videotrans.configure.constants import FASTER_MODELS_DICT
 from videotrans.util.help_down import check_and_down_hf
 
 
 
-@dataclass
+@dataclass(repr=False)
 class XXLRecogn(BaseRecogn):
     def __post_init__(self):
         super().__post_init__()
@@ -36,7 +36,8 @@ class XXLRecogn(BaseRecogn):
                 shutil.copy2(path, dst_dir)
 
     
-    def _return_time(self,t):
+    @staticmethod
+    def _return_time(t):
         _spear2=t.split('.')
         if len(_spear2)<=1:
             return '00:00:00,000'
@@ -52,13 +53,13 @@ class XXLRecogn(BaseRecogn):
         return ":".join(_hms)+f",{ms}"
         
     def _getsrt_from_stdout(self,content,srt_filename):
-        s=re.findall(r'\n(\[([\d:\.]+?) --> ([\d:\.]+?)\])\s(.+?)\n',content,flags=re.S)
+        s=re.findall(r'^\[([\d:\.]+?) --> ([\d:\.]+?)\][ \t]*(.+?)[ \t]*\r?$',content,flags=re.M)
 
         if not s or len(s)<1:
             return
         srts=[]
         for i,it in enumerate(s):
-            srts.append(f"{i+1}\n{self._return_time(it[1])} --> {self._return_time(it[2])}\n{it[3].strip()}")
+            srts.append(f"{i+1}\n{self._return_time(it[0])} --> {self._return_time(it[1])}\n{it[2].strip()}")
         if not srts:
             return
         
@@ -85,7 +86,7 @@ class XXLRecogn(BaseRecogn):
         if self.detect_language!='auto':
             cmd.extend(['-l', self.detect_language.split('-')[0]])
 
-            prompt = settings.get(f'initial_prompt_{self.detect_language}')
+            prompt = settings.get(f'initial_prompt_{self.detect_language.replace("-","_")}')
             if prompt:
                 cmd += ['--initial_prompt', prompt]
         cmd.extend(['--model', self.model_name,'--model_dir', self.local_dir, '--output_dir', '.'])
@@ -124,7 +125,6 @@ class XXLRecogn(BaseRecogn):
                 cwd=self.cache_folder,
                 env=env,                    
                 stdin=subprocess.DEVNULL
-
             )
             if not res or not res.stdout:
                 raise SpeechToTextError(f"{res.stderr}\n{res.stdout}" if res else "Faster_Whisper_XXL error")

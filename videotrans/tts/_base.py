@@ -5,7 +5,7 @@ import inspect
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union, Tuple
 from tenacity import RetryError
@@ -14,14 +14,8 @@ from videotrans.configure.config import tr, settings, logger, ROOT_DIR
 from videotrans.configure import config
 from videotrans.util.help_misc import vail_file,pygameaudio,get_tts_type
 
-"""
-edge-tts 当前线程中async异步任务
-其他渠道多线程执行
-run->exec->[local_mutli]->item_task
-"""
 
-
-@dataclass
+@dataclass(repr=False)
 class BaseTTS(BaseCon):
     # 配音渠道
     tts_type: int = 0
@@ -37,12 +31,11 @@ class BaseTTS(BaseCon):
     uuid: Optional[str] = None
     # 是否立即播放
     play: bool = False
-    # 是否测试
-    is_test: bool = False
     # 音量 音速 音调，默认 edge-tts格式， % 号结尾
     volume: Union[float, str] = field(default='+0%', init=False)
-    rate: Union[float, str] = field(default='+0%', init=False)
     pitch: Union[float, str] = field(default='+0Hz', init=False)
+    rate: Union[float, str] = field(default='+0%', init=False)
+    speed:Union[float,str]=1.0
     # 是否完成
     has_done: int = field(default=0, init=False)
     # 每次任务后暂停时间
@@ -60,6 +53,8 @@ class BaseTTS(BaseCon):
     # 单视频模式下，配音校对面板可能需要重新配音，对于 F5-TTS等重型独立配音进程不能再任务完成后退出，需轮询等待是否有新的配音任务
     # is_redubb is True 代表是配音校对面板发起的
     is_redubb:bool=False
+    model_name: str = field(default='', init=False)
+    ainame: str = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -72,9 +67,9 @@ class BaseTTS(BaseCon):
     # 子类重写  _exec()方法 run() -> _exec()
     def run(self) -> None:
         if self._exit(): return
+        logger.debug(f'{self=}')
         from videotrans.configure.excepts import DubbingSrtError
         _tts_name=get_tts_type(self.tts_type)
-        logger.debug(f'当前使用配音渠道：{_tts_name}')
         self.signal(text=f"{_tts_name} starting: [len={self.len}]")
         loop = None
         try:
@@ -107,7 +102,7 @@ class BaseTTS(BaseCon):
             _e=str(e)
             if self.local_dir and ("no file named model.safetensors" in _e or os.path.basename(self.local_dir) in _e):
                from videotrans.configure.excepts import DownloadModelsError
-               raise  DownloadModelsError(tr('model incomplete error',self.local_dir,tr('Help document')))
+               raise  DownloadModelsError(tr('model incomplete error',self.local_dir,tr('Help document'))+f'\n{self=}')
             raise
         except RuntimeError as e:
             logger.warning(f'TTS 线程运行时发生错误: {e}')
@@ -127,7 +122,7 @@ class BaseTTS(BaseCon):
                 raise self.error.last_attempt.exception()
             if not self.error:
                 self.error='No audio file was generated during the listening test.'
-            raise self.error if isinstance(self.error, Exception) else DubbingSrtError(str(self.error))
+            raise self.error if isinstance(self.error, Exception) else DubbingSrtError(str(self.error)+f'\n{self=}')
 
         # 记录成功数量
         succeed_nums = 0
@@ -138,11 +133,11 @@ class BaseTTS(BaseCon):
         # 只有全部配音都失败，才视为失败
         if succeed_nums < 1:
             if self._exit(): return
-            logger.error(f'本次配音全部失败：{self.error}')
+            logger.error(f'本次配音全部失败：{self.error}\n{self=}')
             if isinstance(self.error, Exception):
                 raise self.error.last_attempt.exception() if isinstance(self.error, RetryError) else self.error
 
-            raise DubbingSrtError(tr("Dubbing failed") + str(self.error))
+            raise DubbingSrtError(tr("Dubbing failed") + str(self.error)+f'\n{self.model_name=}\n{self=}')
         logger.debug(f'本次 {_tts_name} 配音成功 {succeed_nums} 个，失败 {self.len - succeed_nums} 个')
         self.signal(text=tr("Dubbing succeeded {}，failed {}", succeed_nums, self.len - succeed_nums))
 
@@ -205,6 +200,9 @@ class BaseTTS(BaseCon):
     def _exec(self) -> None:
         self._local_mul_thread()
 
+    # 若需下载模型，子类需实现
+    def _download(self):
+        pass
     # 每条字幕任务，由 _local_mul_thread 方法在多个线程中调用
     # data_item 是 queue_tts 中每个元素
     # 子类若没有覆写 _exec() 方法，则必须实现 _run() 方法
@@ -212,7 +210,7 @@ class BaseTTS(BaseCon):
     def _item_task(self, data_item: Union[Dict, List, None], idx: int = -1) -> Union[str, Exception, None]:
         if self._exit() or not data_item.get('text', '').strip() or vail_file(data_item.get('filename')):
             return
-        # 有些不可恢复的错误，例如 404 sk错误 无权访问等，直接发送 error 信号，无需继续多线程
+
         try:
             self.signal(text=f'{tr("Dubbing")} {idx}/{self.len}')
             return self._run(data_item,idx)
@@ -224,8 +222,9 @@ class BaseTTS(BaseCon):
             return e
 
     # 子类未重写 _exec 方法时，则必须实现该方法
+    # 返回错误信息 或 抛出异常，正常无需返回
     def _run(self, data_item: Union[Dict, List, None], idx: int = -1) -> Union[str, None]:
-        raise NotImplemented
+        raise NotImplementedError
 
     # 文本规范化和清理音量等参数
     def _cleantts(self) -> None:
@@ -290,14 +289,17 @@ class BaseTTS(BaseCon):
         role = item['role']
         ref_wav, ref_text = None, None
         if role == 'clone':
-            ref_wav = item.get('ref_wav', '')
-            ref_text = item.get('ref_text').strip()
-        elif role in self.roledict:
+            ref_wav = item.get('ref_wav')
+            ref_text = item.get('ref_text','').strip()
+            if not ref_wav or not Path(ref_wav).exists():
+                raise RuntimeError(tr('The voice actor has been cloned, but there is no')+f'\n{self=}')
+
+        elif role !='No' and role in self.roledict:
             if not isinstance(self.roledict[role],dict):
                 return ref_wav,ref_text
             ref_text = self.roledict[role]['ref_text']
             ref_wav = ROOT_DIR + f"/f5-tts/{role}"
+            if not ref_wav or not Path(ref_wav).exists():
+                raise RuntimeError(tr('The role {} does not exist', role)+f'\n{self=}')
 
-        if not ref_wav or not Path(ref_wav).exists():
-            raise RuntimeError(tr('The role {} does not exist', role))
         return ref_wav, ref_text

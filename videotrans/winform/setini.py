@@ -2,17 +2,13 @@
 
 
 def openwin():
+    from videotrans.winform import get_cls
     from videotrans.util.help_misc import set_process
-
-    from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QLineEdit, QPlainTextEdit, QCheckBox, QComboBox
     from videotrans.configure.config import ROOT_DIR, app_cfg,settings
     from pathlib import Path
-    winobj = None
 
     def save():
-        # 创建一个空字典来存储结果
-        should_model_list_sign = False
         # 遍历找到的所有QLineEdit控件
         for line_edit in winobj.findChildren(QLineEdit):
             # 检查QLineEdit是否有objectName
@@ -26,8 +22,6 @@ def openwin():
             # 检查QLineEdit是否有objectName
             if hasattr(line_edit, 'objectName') and line_edit.objectName():
                 name = line_edit.objectName()
-                if name in ['model_list','Whisper_cpp_models'] and line_edit.toPlainText() != settings[name]:
-                    should_model_list_sign = True
                 # 将objectName作为key，text作为value添加到字典中
                 settings[name] = line_edit.toPlainText()
         for line_edit in winobj.findChildren(QCheckBox):
@@ -40,7 +34,9 @@ def openwin():
             # 检查QLineEdit是否有objectName
             if hasattr(line_edit, 'objectName') and line_edit.objectName():
                 name = line_edit.objectName()
-                if name=='video_codec':
+                if name=='llm_ai_type':
+                    settings[name]=line_edit.currentIndex()
+                elif name=='video_codec':
                     settings[name]=int(line_edit.currentText())
                 else:
                     # 将objectName作为key，text作为value添加到字典中
@@ -50,27 +46,10 @@ def openwin():
         
         settings.save()
         
-        if should_model_list_sign:
-            set_process(text="", type='refreshmodel_list')
 
         winobj.close()
 
 
-    def create():
-        nonlocal winobj
-        from videotrans.component.set_form import SetINIForm
-        winobj=app_cfg.child_forms.get('setini')
-        if winobj:
-
-            winobj.show()
-            winobj.raise_()
-            winobj.activateWindow()
-            return
-        winobj = SetINIForm()
-        app_cfg.child_forms['setini'] = winobj
-        winobj.set_ok.clicked.connect(save)
-        winobj.show()
-        winobj.raise_()
-        winobj.activateWindow()
-
-    QTimer.singleShot(100, create)
+    winobj = get_cls(Path(__file__).stem)()
+    winobj.set_ok.clicked.connect(save)
+    return winobj

@@ -9,33 +9,21 @@ from openai import OpenAI, LengthFinishReasonError,NotFoundError, Authentication
 from tenacity import before_log, retry_if_not_exception_type, wait_fixed, stop_after_attempt, after_log, retry
 
 from videotrans.configure.excepts import NO_RETRY_EXCEPT, TranslateSrtError, LLMSegmentError, StopTask
-from videotrans.configure.config import logger, settings, params, ROOT_DIR, tr
+from videotrans.configure.config import logger, settings, ROOT_DIR, tr
+
 from videotrans.task.taskcfg import SrtItem
 from videotrans.translator._base import BaseTrans
 from videotrans.util._srt_parse import get_subtitle_from_srt, ms_to_time_string
-from videotrans.util.help_misc import get_prompt, get_tanslate_type
+from videotrans.util.help_misc import  get_tanslate_type
 
 
-@dataclass
+@dataclass(repr=False)
 class OpenAICampat(BaseTrans):
-    ainame:str=None
-    prompt: str = field(init=False)
-    api_key: str = field(init=False)
-    api_url: str = field(init=False)
-    temperature:float=1.0
-    max_tokens:int=8192
-    reasoning_effort:str=None
-    extra_body:Union[dict,None]=None
 
     def __post_init__(self):
         super().__post_init__()
         self.temperature=float(settings.get('aitrans_temperature', 1.0))
-        lang_prompt=''
-        lang_prompt_file=f'{ROOT_DIR}/videotrans/prompts/language_prompts/{self.target_language_name}.txt'
-        if Path(lang_prompt_file).exists():
-            lang_prompt=Path(lang_prompt_file).read_text(encoding='utf-8')
-        self.prompt = get_prompt(ainame=self.ainame,aisendsrt=self.aisendsrt).replace('{lang}',self.target_language_name).replace('{lang_prompt}',lang_prompt)
-
+        self.prompt=self._set_context()
         try:
             self.max_tokens=int(self.max_tokens)
         except (ValueError,TypeError) as e:
@@ -51,12 +39,22 @@ class OpenAICampat(BaseTrans):
         return model.chat.completions.create(**kwargs, extra_body=self.extra_body)
 
     @retry(retry=retry_if_not_exception_type(NO_RETRY_EXCEPT), stop=(stop_after_attempt(settings.get('retry_nums'))), wait=wait_fixed(2), before=before_log(logger, logging.INFO),after=after_log(logger, logging.INFO))
-    def _item_task(self, data: Union[List[str], str]) -> str:
+    def _item_task(self, data: str) -> str:
+        """
+
+        Args:
+            data: 1. 是AI翻译渠道并且选中了`发送完整字幕`：data是  SRT格式字幕字符串
+                 2. 是传统翻译渠道或未选`发送完整字幕`：data是  多行字幕文本字符串
+
+        Returns:
+            str
+
+        """
         if self._exit(): return
         if len(self.api_url)<10:
             raise StopTask(f'API URL is error: {self.api_url}')
         
-        text = "\n".join([i.strip() for i in data]) if isinstance(data, list) else data
+        text = data
         
         message = [
             {
@@ -83,68 +81,53 @@ class OpenAICampat(BaseTrans):
         if self.reasoning_effort:
             kwargs["reasoning_effort"]=self.reasoning_effort
             
-        logger.debug(f'字幕翻译:{self.ainame=},{kwargs=},{self.extra_body=}')
         kwargs["messages"]=message
-        
+
         try:
             response = self._create_completion(kwargs)
+            result = response.choices[0].message.content.strip()
+            match = re.search(r'<TRANSLATE_TEXT>(.*?)</TRANSLATE_TEXT>', re.sub(r'<think>(.*?)</think>', '',result,flags=re.I), flags=re.S|re.I)
+            if match:
+                return match.group(1)
+            return result.strip()
         except APIConnectionError as e:
             raise StopTask(f'[{self.ainame}] {tr("Unable to connect to API",self.api_url)}\n{e.message}') from e
         except (NotFoundError,AuthenticationError,PermissionDeniedError,BadRequestError) as e:
             del kwargs['messages']
-            raise StopTask((e.body.get('message') if e.body else e.message)+f'\n{self.api_url}\n{kwargs}') from e
+            _msg=(e.body.get('message') if e.body else e.message) or str(e)
+            raise StopTask(f'{_msg}\n{self.api_url}\n{kwargs}\n{self.extra_body}') from e
         except APIError as e: 
             if re.search(r"insufficient.*?balance",e.message,flags=re.I):
                 raise StopTask(tr('The server returned an error message: Insufficient balance',get_tanslate_type(self.translate_type),self.api_url))
             raise
             
-        result = ""
-        if not hasattr(response,'choices') or not response.choices:
-            raise TranslateSrtError(str(response))
-        if response.choices[0].finish_reason=='length':
-            raise LengthFinishReasonError(completion=response)
-        if not response.choices[0].message.content:
-            logger.warning(f'[{self.ainame}]请求失败:{response=}')
-            raise TranslateSrtError(f"[{self.ainame}] {self.api_url} {response.choices[0].finish_reason}:{response}")
-        result = response.choices[0].message.content.strip()
-        match = re.search(r'<TRANSLATE_TEXT>(.*?)</TRANSLATE_TEXT>', re.sub(r'<think>(.*?)</think>', '',result), re.S)
-        if match:
-            return match.group(1)
-        return result.strip()
+
 
 
     def llm_segment(self, srt_list,step='')->List[SrtItem]:
         _st=time.time()
-        api_url=params.get('chatgpt_api') if self.ainame!='deepseek' else 'https://api.deepseek.com/v1/'
-        if len(api_url)<10:
-            raise StopTask(f'API URL is error: {api_url}')
-
-        prompts_template = Path(f'{ROOT_DIR}/videotrans/prompts/resegment/llm{step}.txt').read_text(encoding='utf-8')
-        prompts_template = prompts_template.replace('{max_speech_s}', str(int(int(settings.get('max_speech_duration_s', 6))*1.7)) )
+        flag="LLM纠错"
+        if not step and settings.get('llm_resegment'):
+            flag="LLM重新断句替换LLM纠错"
+            prompts_template = Path(f'{ROOT_DIR}/videotrans/prompts/resegment/llm_re.txt').read_text(encoding='utf-8').replace('{max_speech_s}',str(settings.get('max_speech_duration_s',5)))
+        else:
+            prompts_template = Path(f'{ROOT_DIR}/videotrans/prompts/resegment/llm.txt').read_text(encoding='utf-8')
         chunk_size = int(settings.get('llm_chunk_size', 20))
-        model_name=params.get(f'{self.ainame}_model')
-        max_tokens=max(8192,int( float(params.get(f'{self.ainame}_max_token', 8192)) ))
-        temperature=float(settings.get('aitrans_temperature', 1.0))
-        api_key=params.get(f'{self.ainame}_key')           
-        reasoning_effort='high' if self.ainame=='deepseek' else None
-        
-        if reasoning_effort is None:
-            _reason=params.get('chatgpt_reasoning_effort')
-            reasoning_effort=None if not _reason or _reason=='No' else _reason
-        
+
         kwargs={
-                "model":model_name,
-                
-                "temperature":temperature,
+                "model":self.model_name,
+                "temperature":self.temperature,
                 "timeout":600,   
         }
-        if reasoning_effort:
-            kwargs['reasoning_effort']=reasoning_effort
-        if "api.openai.com" in api_url or ( self.ainame=='chatgpt' and re.match(r'^(gpt|o\d)', model_name, flags=re.I)):
-            kwargs["max_completion_tokens"]=int(max_tokens)
+        if self.reasoning_effort:
+            kwargs["reasoning_effort"]=self.reasoning_effort
+
+        if "api.openai.com" in self.api_url or ( self.ainame=='chatgpt' and re.match(r'^(gpt|o\d)', self.model_name, flags=re.I)):
+            kwargs["max_completion_tokens"]=int(self.max_tokens)
         else:
-            kwargs["max_tokens"]=int(max_tokens)
-        logger.debug(f'LLM Re-segmenting:{self.ainame=},{kwargs=},{model_name=},{api_url=},{step=}')
+            kwargs["max_tokens"]=int(self.max_tokens)
+
+
         @retry(retry=retry_if_not_exception_type(NO_RETRY_EXCEPT), stop=(stop_after_attempt(2)),
                wait=wait_fixed(5), before=before_log(logger, logging.INFO),
                after=after_log(logger, logging.INFO))
@@ -159,27 +142,14 @@ class OpenAICampat(BaseTrans):
                 }
             ]
             kwargs["messages"]=message
-            model = OpenAI(api_key=api_key, base_url=api_url)
-            response = model.chat.completions.create(
-                    **kwargs,
-                    extra_body={"thinking": {"type": "enabled"}} if self.ainame=='deepseek' else None
-            )
+            response = self._create_completion(kwargs)
             
-            if not response or not hasattr(response, 'choices') or not response.choices:
-                logger.warning(f'[{self.ainame}]重新断句失败:{response=}')
-                raise LLMSegmentError(f"[{self.ainame}]{response}")
-
-            if response.choices[0].finish_reason == 'length':
-                raise LLMSegmentError(f"[{self.ainame}] Please increase max_token")
-            if not response.choices[0].message.content:
-                logger.warning(f'[{self.ainame}]重新断句失败:{response=}')
-                raise LLMSegmentError(f"[{self.ainame}] {response}")
-
-            result = response.choices[0].message.content
-            match = re.search(r'<SRT>(.*?)</SRT>', re.sub(r'<think>(.*?)</think>', '', result, flags=re.I | re.S), re.S | re.I)
+            result = response.choices[0].message.content or ""
+            match = re.search(r'<SRT>(.*?)</SRT>', re.sub(r'<think>(.*?)</think>', '', result, flags=re.I | re.S), flags=re.S | re.I)
             if match:
                 return match.group(1)
             return result.strip()
+            
         
         new_sublist = []
         for idx in range(0, len(srt_list), chunk_size):
@@ -203,5 +173,5 @@ class OpenAICampat(BaseTrans):
                 it['startraw'] = ms_to_time_string(ms=it['start_time'])
                 it['endraw'] = ms_to_time_string(ms=it['end_time'])
                 it["time"] = f"{it['startraw']} --> {it['endraw']}"
-        logger.debug(f'{"【二次识别后】"  if step else ""}LLM重新断句完成,原始字幕行:{len(srt_list)}, 新字幕行:{len(_srtlist)}, 用时:{time.time()-_st}s')
+        logger.debug(f'{"【二次识别后】"  if step else ""} {flag},原始字幕行:{len(srt_list)}, 新字幕行:{len(_srtlist)}, 用时:{time.time()-_st}s')
         return _srtlist

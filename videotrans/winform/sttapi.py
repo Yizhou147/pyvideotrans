@@ -1,12 +1,13 @@
 def openwin():
+    from videotrans.winform import get_cls
     from videotrans.configure.config import tr,params,app_cfg
     from videotrans import recognition
     from videotrans.util.TestSTT import TestSTT
     from videotrans.winform._helpers import make_feed_stt
-    from videotrans.component.set_form import SttAPIForm
+    from pathlib import Path
 
-    winobj = SttAPIForm()
-    app_cfg.child_forms['sttapi'] = winobj
+
+    winobj = get_cls(Path(__file__).stem)()
 
     feed = make_feed_stt(winobj, "test")
 
@@ -16,20 +17,19 @@ def openwin():
         return url
 
     def test():
-        params['stt_url'] = _fix_url(winobj.stt_url.text().strip())
+        params['sttapi_url'] = _fix_url(winobj.sttapi_url.text().strip())
+        params.save()
         winobj.test.setText(tr("Testing..."))
-        task = TestSTT(parent=winobj, recogn_type=recognition.STT_API, model_name=winobj.stt_model.currentText())
+        task = TestSTT(parent=winobj, recogn_type=recognition.STT_API, model_name=winobj.stt_model.currentText().strip())
         task.uito.connect(feed)
         task.start()
 
     def save():
-        params["stt_url"] = _fix_url(winobj.stt_url.text().strip()).rstrip('/')
-        params["stt_model"] = winobj.stt_model.currentText()
+        params["sttapi_url"] = _fix_url(winobj.sttapi_url.text().strip()).rstrip('/')
         params.save()
         winobj.close()
 
-    winobj.stt_url.setText(str(params.get("stt_url", '')))
-    winobj.stt_model.setCurrentText(str(params.get("stt_model", '')))
+    winobj.sttapi_url.setText(str(params.get("sttapi_url", '')))
     winobj.set.clicked.connect(save)
     winobj.test.clicked.connect(test)
-    winobj.show()
+    return winobj

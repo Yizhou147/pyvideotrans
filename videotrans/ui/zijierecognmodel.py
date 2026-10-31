@@ -3,24 +3,23 @@
 
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import Qt
-from videotrans.configure.config import tr, params
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QDialog
+
+from videotrans.configure.config import tr, params,ROOT_DIR
 from videotrans.util.help_misc import open_url
 
 
-class Ui_zijierecognform(object):
-    def setupUi(self, zijierecognform):
+class Ui_zijierecognmodel(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowIcon(QIcon(f"{ROOT_DIR}/videotrans/styles/icon.ico"))
+        self.setupUi(self)
+    def setupUi(self, form):
         self.has_done = False
-        zijierecognform.setObjectName("zijierecognform")
-        zijierecognform.setWindowModality(QtCore.Qt.NonModal)
+        form.setObjectName("form")
 
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(zijierecognform.sizePolicy().hasHeightForWidth())
-        zijierecognform.setSizePolicy(sizePolicy)
-        zijierecognform.setMaximumSize(QtCore.QSize(800, 300))
-
-        self.verticalLayout = QtWidgets.QVBoxLayout(zijierecognform)
+        self.verticalLayout = QtWidgets.QVBoxLayout(form)
         self.verticalLayout.setObjectName("verticalLayout")
 
         labetips=QtWidgets.QLabel(
@@ -34,23 +33,14 @@ class Ui_zijierecognform(object):
         self.formLayout_2.setSizeConstraint(QtWidgets.QLayout.SetMinimumSize)
         self.formLayout_2.setFormAlignment(QtCore.Qt.AlignJustify | QtCore.Qt.AlignVCenter)
         self.formLayout_2.setObjectName("formLayout_2")
-        self.label = QtWidgets.QLabel(zijierecognform)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.label.sizePolicy().hasHeightForWidth())
-        self.label.setSizePolicy(sizePolicy)
-        self.label.setMinimumSize(QtCore.QSize(100, 35))
+        self.label = QtWidgets.QLabel()
+        self.label.setMinimumSize(QtCore.QSize(0, 35))
         self.label.setAlignment(QtCore.Qt.AlignJustify | QtCore.Qt.AlignVCenter)
         self.label.setObjectName("label")
         self.formLayout_2.setWidget(0, QtWidgets.QFormLayout.LabelRole, self.label)
-        self.zijierecognmodel_appid = QtWidgets.QLineEdit(zijierecognform)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.zijierecognmodel_appid.sizePolicy().hasHeightForWidth())
-        self.zijierecognmodel_appid.setSizePolicy(sizePolicy)
-        self.zijierecognmodel_appid.setMinimumSize(QtCore.QSize(210, 35))
+        self.zijierecognmodel_appid = QtWidgets.QLineEdit()
+
+        self.zijierecognmodel_appid.setMinimumSize(QtCore.QSize(0, 35))
         self.zijierecognmodel_appid.setObjectName("zijierecognmodel_appid")
         self.formLayout_2.setWidget(0, QtWidgets.QFormLayout.FieldRole, self.zijierecognmodel_appid)
         self.verticalLayout.addLayout(self.formLayout_2)
@@ -59,30 +49,30 @@ class Ui_zijierecognform(object):
         self.formLayout.setSizeConstraint(QtWidgets.QLayout.SetMinimumSize)
         self.formLayout.setFormAlignment(QtCore.Qt.AlignLeading | QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self.formLayout.setObjectName("formLayout")
-        self.label_2 = QtWidgets.QLabel(zijierecognform)
-        self.label_2.setMinimumSize(QtCore.QSize(100, 35))
+        self.label_2 = QtWidgets.QLabel()
+        self.label_2.setMinimumSize(QtCore.QSize(0, 35))
         self.label_2.setSizeIncrement(QtCore.QSize(0, 35))
         self.label_2.setObjectName("label_2")
         self.formLayout.setWidget(0, QtWidgets.QFormLayout.LabelRole, self.label_2)
 
-        self.zijierecognmodel_token = QtWidgets.QLineEdit(zijierecognform)
-        self.zijierecognmodel_token.setMinimumSize(QtCore.QSize(210, 35))
-        self.zijierecognmodel_token.setObjectName("zijierecognmodel_token")
-        self.formLayout.setWidget(0, QtWidgets.QFormLayout.FieldRole, self.zijierecognmodel_token)
+        self.zijierecognmodel_key = QtWidgets.QLineEdit()
+        self.zijierecognmodel_key.setMinimumSize(QtCore.QSize(0, 35))
+        self.zijierecognmodel_key.setObjectName("zijierecognmodel_key")
+        self.formLayout.setWidget(0, QtWidgets.QFormLayout.FieldRole, self.zijierecognmodel_key)
         self.verticalLayout.addLayout(self.formLayout)
 
 
         h4 = QtWidgets.QHBoxLayout()
 
-        self.set = QtWidgets.QPushButton(zijierecognform)
+        self.set = QtWidgets.QPushButton()
         self.set.setMinimumSize(QtCore.QSize(0, 35))
         self.set.setObjectName("set")
 
-        self.test = QtWidgets.QPushButton(zijierecognform)
+        self.test = QtWidgets.QPushButton()
         self.test.setMinimumSize(QtCore.QSize(0, 35))
         self.test.setObjectName("test")
 
-        help_btn = QtWidgets.QPushButton(zijierecognform)
+        help_btn = QtWidgets.QPushButton()
         help_btn.setMinimumSize(QtCore.QSize(0, 35))
         help_btn.setStyleSheet("background-color: rgba(255, 255, 255,0)")
         help_btn.setObjectName("help_btn")
@@ -95,14 +85,14 @@ class Ui_zijierecognform(object):
         h4.addWidget(help_btn)
         self.verticalLayout.addLayout(h4)
 
-        self.retranslateUi(zijierecognform)
-        QtCore.QMetaObject.connectSlotsByName(zijierecognform)
+        self.retranslateUi(form)
+        QtCore.QMetaObject.connectSlotsByName(form)
     def update_ui(self):
         self.zijierecognmodel_appid.setText(str(params.get("zijierecognmodel_appid",'')))
-        self.zijierecognmodel_token.setText(str(params.get("zijierecognmodel_token",'')))
+        self.zijierecognmodel_key.setText(str(params.get("zijierecognmodel_key",'')))
 
-    def retranslateUi(self, zijierecognform):
-        zijierecognform.setWindowTitle(tr('VolcEngine STT'))
+    def retranslateUi(self, form):
+        form.setWindowTitle(tr('VolcEngine STT'))
         self.label.setText("AppID")
         self.label_2.setText("Access Token")
         self.set.setText(tr("Save"))

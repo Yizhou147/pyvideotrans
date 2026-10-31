@@ -11,13 +11,13 @@ from videotrans.recognition._base import BaseRecogn
 from videotrans.task.taskcfg import SrtItem
 
 
-@dataclass
+@dataclass(repr=False)
 class GLMASRRecogn(BaseRecogn):
     def _exec(self) -> Union[List[SrtItem], None]:
         if self._exit(): return
         # 发送请求
         raws = self.cut_audio()
-        apikey = params.get('zhipu_key')
+        apikey = params.get('zhipuai_key')
 
         url = "https://open.bigmodel.cn/api/paas/v4/audio/transcriptions"
         err=''
@@ -27,7 +27,7 @@ class GLMASRRecogn(BaseRecogn):
                 file_data = f.read()
             files = { "file":   (Path(it['filename']).name, file_data) }
             payload = {
-                "model": "glm-asr-2512",
+                "model":self.model_name,
                 "stream": "false"
             }
             headers = {"Authorization": f"Bearer {apikey}"}

@@ -10,46 +10,15 @@ from PySide6.QtWidgets import (
     QGraphicsRectItem, QGraphicsPathItem, QScrollArea, QLineEdit
 )
 
+from videotrans.configure._languages_dict import LISTEN_TEXT
 from videotrans.configure.config import ROOT_DIR, tr, defaulelang, settings
+from videotrans.configure.constants import DEFAULT_STYLE
 
 JSON_FILE = f'{ROOT_DIR}/videotrans/ass.json'
 PREVIEW_IMAGE = f'{ROOT_DIR}/videotrans/styles/preview.png'
 
 
 
-DEFAULT_STYLE = {
-    'Name': 'Default',
-    'Fontname': 'Arial',
-    'Bottom_Fontname': 'Arial',
-    'Fontsize': 16,
-    'Bottom_Fontsize': 16,
-    'PrimaryColour': '&H00FFFFFF&',
-    'Bottom_PrimaryColour': '&H00FFFFFF&',
-    'SecondaryColour': '&H00FFFFFF&',
-    'OutlineColour': '&H00000000&',
-    'BackColour': '&H00000000&',
-    'Bold': 0,
-    'Italic': 0,
-    'Bottom_SecondaryColour': '&H00FFFFFF&',
-    'Bottom_OutlineColour': '&H00000000&',
-    'Bottom_BackColour': '&H00000000&',
-    'Bottom_Bold': 0,
-    'Bottom_Italic': 0,
-    'Underline': 0,
-    'StrikeOut': 0,
-    'ScaleX': 100,
-    'ScaleY': 100,
-    'Spacing': 0,
-    'Angle': 0,
-    'BorderStyle': 1,
-    'Outline': 0.5,
-    'Shadow': 0.5,
-    'Alignment': 2,
-    'MarginL': 10,
-    'MarginR': 10,
-    'MarginV': 10,
-    'Encoding': 1
-}
 
 class ColorPicker(QWidget):
     colorChanged = Signal()
@@ -134,7 +103,7 @@ class PreviewWidget(QGraphicsView):
     def update_preview(self, style):
         self.clear_items()
 
-        text =  '你好啊，亲爱的朋友们！' if defaulelang=='zh' else  'Hello, my dear friend. hope your every day beautiful'
+        text =  LISTEN_TEXT["en"]
 
         font = QFont(style['Fontname'], style['Fontsize'])
         font.setBold(bool(style['Bold']))
@@ -275,7 +244,7 @@ class PreviewWidget(QGraphicsView):
         if style['Shadow'] > 0:
             shadow_item.setPos(x + style['Shadow'], y + style['Shadow'])
 
-class ASSStyleDialog(QDialog):
+class SET_ASS(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("window_title"))

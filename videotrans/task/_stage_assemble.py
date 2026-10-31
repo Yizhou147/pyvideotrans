@@ -46,35 +46,24 @@ class AssembleMixin:
                              f"{self.cfg.target_dir}/{self.cfg.target_language_code}-{self.cfg.noextname}.wav")
             except shutil.SameFileError:
                 pass
+            return self.set_end(True)
 
-        try:
-            if self.cfg.only_out_mp4:
-                shutil.move(self.cfg.targetdir_mp4, Path(self.cfg.target_dir).parent / Path(self.cfg.targetdir_mp4).name)
+        if not Path(self.cfg.targetdir_mp4).exists():
+            return self.set_end(False)
+        
+        if self.cfg.only_out_mp4:
+            dst=Path(self.cfg.target_dir).parent / Path(self.cfg.targetdir_mp4).name
+            try:
+                shutil.move(self.cfg.targetdir_mp4, dst)
+            except OSError as e:
+                shutil.copy2(self.cfg.targetdir_mp4, dst)
+                logger.exception(f'仅输出mp4时清理临时文件移动视频位置出错，跳过 {e}', exc_info=True)
+            
+            if dst.exists():
                 shutil.rmtree(self.cfg.target_dir, ignore_errors=True)
-        except OSError as e:
-            logger.exception(f'仅输出mp4时清理临时文件移动视频位置出错，跳过 {e}', exc_info=True)
-
+        
         self.set_end(True)
-        logger.debug(f'[{self.cfg.name}视频翻译任务结束，总耗时]:{time.time()-self.cost_duration}s')
 
-    def _video_extend(self, duration_ms=1000):
-        sec = duration_ms / 1000.0
-        final_video_path = Path(f'{self.cfg.cache_folder}/final_video_with_freeze_lastend.mp4').as_posix()
-
-        cmd = ['-y', '-i', os.path.basename(self.cfg.novoice_mp4),
-               '-vf', f'tpad=stop_mode=clone:stop_duration={sec:.3f}',
-               '-c:v', 'libx264',
-               '-crf', f'{settings.get("crf", 23)}',
-               '-preset', settings.get('preset', 'veryfast'),
-               '-an', 'final_video_with_freeze_lastend.mp4'
-        ]
-        try:
-            runffmpeg(cmd, force_cpu=True, cmd_dir=self.cfg.cache_folder)
-            if Path(final_video_path).exists():
-                shutil.copy2(final_video_path, self.cfg.novoice_mp4)
-                logger.debug(f"视频定格应延长{duration_ms}ms，实际向上取整秒延长{sec}s,操作成功。")
-        except Exception as e:
-            logger.exception(f"视频定格延长操作失败,跳过 {e}", exc_info=True)
 
     def _join_video_audio_srt(self) -> None:
         if self._exit() or not self.should_hebing:
@@ -85,14 +74,12 @@ class AssembleMixin:
             raise VideoTransError(f'{self.cfg.novoice_mp4} 不存在')
 
         if self.should_dubbing and not vail_file(self.cfg.target_wav):
-            raise VideoTransError(f"{tr('Dubbing')}{tr('anerror')}:{self.cfg.target_wav}")
+            raise VideoTransError(f"{tr('The audio file does not exist')}:{self.cfg.target_wav}")
 
         self.precent = min(max(90, self.precent), 98)
         target_m4a = self.cfg.cache_folder + "/will_embed.m4a"
         output_source_output = True
         duration_ms = int(get_video_duration(self.cfg.novoice_mp4))
-        # 如果视频时长大于音频时长，音频末尾补静音，后续不再判断音频是否大于视频
-        audio_had_append=False
         if not self.should_dubbing:
             self.signal(text=tr("Get original sound..."))
             self._get_origin_audio(target_m4a,duration_ms)
@@ -123,22 +110,14 @@ class AssembleMixin:
             self.signal(text=tr("Check original BGM..."))
             self._separate()
 
-            audio_ms = get_audio_time(self.cfg.target_wav)
+
             _cmd=[
                 "-y",
                 "-i",
-                os.path.basename(self.cfg.target_wav)
-            ]
-            v_a_offset=duration_ms-audio_ms
-            # 视频时长大于音频超过100ms，音频末尾补静音
-            if v_a_offset>100:
-                audio_had_append=True
-                logger.debug(f'视频时长{duration_ms}ms-音频时长{audio_ms}ms={v_a_offset}ms,需延长音频')
-                _cmd.extend(['-af', f'apad=pad_dur={v_a_offset/1000.0}'])
-            _cmd.extend([
+                os.path.basename(self.cfg.target_wav),
                 "-ac", "2", "-b:a", "128k", "-c:a", "aac",
                 os.path.basename(target_m4a)
-            ])
+            ]
             self.signal(text=tr("Process voiceover for embedding..."))
             runffmpeg(_cmd, cmd_dir=self.cfg.cache_folder)
 
@@ -155,21 +134,15 @@ class AssembleMixin:
 
         audio_ms = get_audio_time(target_m4a)
         a_v_offset=audio_ms-duration_ms
-
+        logger.debug(f'最终合并视频前：音频时长 {audio_ms}ms, 视频时长: {duration_ms}ms ' + (f'，音频大于时长 {a_v_offset}ms, 应实现视频末尾定格' if a_v_offset>0 else ''))
+        # 中间处理均为 h264, 若最终输出也是264，可直接 copy
         is_copy_mode = str(self.video_codec_num) == '264'
-        is_lossless=self.is_copy_video and is_copy_mode and not self.cfg.video_autorate and self.cfg.subtitle_type not in [1, 3]
+        is_lossless= is_copy_mode and not self.cfg.video_autorate and self.cfg.subtitle_type not in [1, 3]
         if is_lossless:
-            logger.debug(f'当前原始视频是标准264,输出也是264，未视频慢速，未嵌入硬字幕，放弃视频末尾处理，实现无损输出。音频时长-视频时长={a_v_offset}ms'+('，\n音频时长大于视频时长{a_v_offset}ms，理论上视频末尾应定格等待音频播放完毕，但不同播放器可能有不同处理方式，如音频截断，视频末尾黑屏等' if a_v_offset>0 else ''))
-
-        elif a_v_offset > 500 and not audio_had_append:#只有未对音频末尾增加静音，才考虑延长视频
-            try:
-                self.signal(text="Freeze end of video...")
-                self._video_extend(a_v_offset)
-            except Exception as e:
-                logger.exception(f'定格视频最后一帧时失败，跳过 {e}', exc_info=True)
+            logger.debug(f'当前原始视频是标准264, 输出也是264，未视频慢速，未嵌入硬字幕，实现无损输出。')
 
         tmp_target_mp4 = self.cfg.cache_folder + f"/laste_target{_video_output_ext}"
-        self.signal(text=tr("Video + Subtitles + Dubbing in merge"))
+
 
         try:
             protxt = self.cfg.cache_folder + f"/compose{time.time()}.txt"
@@ -183,7 +156,7 @@ class AssembleMixin:
             if not app_cfg.video_codec:
                 self.signal(text=tr("Check supported hardware codes..."))
                 app_cfg.video_codec = get_video_codec()
-
+            self.signal(text=tr("Video + Subtitles + Dubbing in merge"))
             cmd0 = [
                 "-y",
                 "-progress",
@@ -236,7 +209,7 @@ class AssembleMixin:
                 if fps_mode:
                     cmd2.extend(fps_mode)
 
-                cmd2.extend(['-shortest',tmp_target_mp4_basename])
+                cmd2.extend([tmp_target_mp4_basename])
                 if is_copy_mode:
                     logger.debug(f'[最终视频合成]copy模式，无需重新编码:\n{cmd0 + cmd1 + cmd2}')
                     runffmpeg(cmd0 + cmd1 + cmd2, cmd_dir=self.cfg.cache_folder, force_cpu=True)
@@ -251,6 +224,7 @@ class AssembleMixin:
                     except Exception as e:
                         cmd1[cmd1.index('-c:v') + 1] = f'libx{self.video_codec_num}'
                         logger.exception(f'硬件处理视频合成失败，回退软编 {e}', exc_info=True)
+                        logger.debug(f'cmd=\n{cmd0 + cmd1 + enc_qua + cmd2}')
                         runffmpeg(cmd0 + cmd1 + enc_qua + cmd2, cmd_dir=self.cfg.cache_folder, force_cpu=True)
 
             else:
@@ -270,7 +244,7 @@ class AssembleMixin:
 
                 if fps_mode:
                     cmd3.extend(fps_mode)
-                cmd3.extend(['-shortest', tmp_target_mp4_basename])
+                cmd3.extend([ tmp_target_mp4_basename])
                 if app_cfg.video_codec.startswith('libx') or settings.get('force_lib'):
                     logger.debug(f'[最终视频合成]不支持硬件编解码或指定了强制软编解码:\n{cmd0 + cmd1 + cmd2}')
                     runffmpeg(cmd0 + cmd1 + subtitle_filter + cmd2 + enc_qua + cmd3,
@@ -283,20 +257,22 @@ class AssembleMixin:
                     except Exception as e:
                         cmd2[cmd2.index('-c:v') + 1] = f'libx{self.video_codec_num}'
                         logger.exception(f'硬件处理视频合成失败，回退软编 {e}', exc_info=True)
+                        logger.debug(f'cmd=\n{cmd0 + cmd1 + subtitle_filter + cmd2 + enc_qua + cmd3}')
                         runffmpeg(cmd0 + cmd1 + subtitle_filter + cmd2 + enc_qua + cmd3,
                                         cmd_dir=self.cfg.cache_folder, force_cpu=True)
         except Exception as e:
             raise VideoTransError(tr('Error in embedding the final step of the subtitle dubbing')+str(e)) from e
 
         if Path(tmp_target_mp4).exists():
+            self.cfg.targetdir_mp4=self.cfg.targetdir_mp4[:-4]+_video_output_ext
             try:
-                self.cfg.targetdir_mp4=self.cfg.targetdir_mp4[:-4]+_video_output_ext
-                shutil.copy2(tmp_target_mp4, self.cfg.targetdir_mp4)
-            except Exception:
+                shutil.move(tmp_target_mp4, self.cfg.targetdir_mp4)
+            except Exception as e:
+                logger.exception(e,exc_info=True)
                 try:
-                    shutil.copy2(tmp_target_mp4, f'{self.cfg.target_dir}/0{_video_output_ext}')
+                    shutil.copy2(tmp_target_mp4, self.cfg.targetdir_mp4)
                 except Exception as e:
-                    logger.exception(f'再次复制到目标文件夹内 0{_video_output_ext}也失败 {e}', exc_info=True)
+                    logger.exception(e,exc_info=True)
                     raise VideoTransError(tr('Translation successful but transfer failed.', tmp_target_mp4)) from e
 
         while output_source_output is not True:
@@ -426,19 +402,43 @@ class AssembleMixin:
 
     def _subprocess(self, cmd):
         logger.debug(f'[尝试硬件编解码执行命令]\n{" ".join(cmd)}\n')
-        try:
-            if app_cfg.exit_soft: return
-            cmd = ["ffmpeg", '-nostdin'] + cmd
-            subprocess.run(
-                cmd,
-                encoding="utf-8",
-                errors='ignore',
-                check=True,
-                text=True,
-                capture_output=True,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0,
-                cwd=self.cfg.cache_folder
-            )
-            return True
-        except subprocess.CalledProcessError as e:
-            raise FFmpegError(f"尝试使用硬件执行命令出错[CalledProcessError]:{e.stderr}\n{e.stdout},{e}") from e
+        if app_cfg.exit_soft:
+            return
+        cmd = ["ffmpeg", "-nostdin"] + cmd
+
+        proc = subprocess.Popen(
+            cmd,
+            encoding="utf-8",
+            errors="ignore",
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            creationflags=(
+                subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            ),
+            cwd=self.cfg.cache_folder,
+        )
+
+        _t, _n = 0, 0
+        while True:
+            try:
+                # 内部超时等待 0.1s，同时自动清空缓冲区（无需 sleep）
+                stdout, stderr = proc.communicate(timeout=0.1)
+                break  # 进程执行完成，跳出循环
+            except subprocess.TimeoutExpired:
+                _t += 0.1
+                _n += 1
+                if _n % 10 == 0:
+                    self.signal(
+                        text=f'Merging  {round(_t, 1)}s'
+                    )
+                if app_cfg.exit_soft:
+                    proc.kill()
+                    proc.communicate()
+                    return True
+
+        if proc.returncode != 0:
+            logger.error(f"尝试使用硬件执行命令出错:{stderr}\n{stdout},{cmd=}")
+            raise RuntimeError(f"{stderr},{stdout}")
+        return True

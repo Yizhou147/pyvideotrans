@@ -29,7 +29,7 @@ class DubbingMixin:
             for it in subs:
                 if self.cfg.fix_punc==2:
                     it['text']=delete_punc(it['text'])
-                it['text']=it['text'].strip('...')
+                it['text']=it['text'].strip('...').strip('…').strip()
             self._save_srt_target(subs, self.cfg.source_sub)
         if self.should_dubbing:
             self.signal(text=tr('The dubbing is finished'))
@@ -60,7 +60,7 @@ class DubbingMixin:
                 continue
             voice = line_roles.get(f'{it["line"]}', voice_role) if line_roles else voice_role
 
-            _key = get_md5(f"{self.cfg.target_language_code}-{it['text']}-{voice}-{rate}-{self.cfg.volume}-{self.cfg.pitch}-{self.cfg.tts_type}")
+            _key = get_md5(f"{self.cfg.target_language_code}-{it['text']}-{voice}-{rate}-{self.cfg.volume}-{self.cfg.pitch}-{self.cfg.tts_type}-{settings.get('remove_dubb_silence', True)}-{settings.get('remove_dubb_all_silence', True)}-{settings.get('remove_dubb_silence_level', 'default')}")
 
             tmp_dict = {
                 "text": it['text'],
@@ -90,7 +90,7 @@ class DubbingMixin:
                 tmp_dict['ref_language'] = _lang
             queue_tts.append(tmp_dict)
 
-        self.queue_tts = copy.deepcopy(queue_tts)
+        self.queue_tts = queue_tts
 
         if not self.queue_tts or len(self.queue_tts) < 1:
             raise RuntimeError(f'字幕长度为0，无法继续配音')
@@ -99,7 +99,7 @@ class DubbingMixin:
             self._create_ref_from_vocal()
 
         run_tts(
-            queue_tts=self.queue_tts,
+            queue_tts=copy.deepcopy(queue_tts),
             language=self.cfg.target_language_code,
             uuid=self.uuid,
             tts_type=self.cfg.tts_type,
@@ -110,10 +110,10 @@ class DubbingMixin:
             outname = self.cfg.target_dir + f'/segment_audio_{self.cfg.noextname}'
             Path(outname).mkdir(parents=True, exist_ok=True)
         for it in self.queue_tts:
-            it['text']=it['text'].strip('...')
+            it['text']=it['text'].strip('...').strip('…').strip()
             if self.cfg.fix_punc==2:
                 it['text']=delete_punc(it['text'])
-            if Path(it['filename']).exists():
+            if vail_file(it['filename']):
                 # 保存缓存
                 shutil.copy2(it['filename'],f'{DUBBING_CACHE}/'+Path(it['filename']).name.split('-')[-1])
                 if outname:

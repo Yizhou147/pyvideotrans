@@ -3,25 +3,24 @@
 
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QDialog
 
-from videotrans.configure.config import tr, params, settings
+from videotrans.configure.config import tr, params, settings, ROOT_DIR
 from videotrans.util.help_misc import open_url
 
 
-class Ui_localllmform(object):
-    def setupUi(self, localllmform):
+class Ui_localllm(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowIcon(QIcon(f"{ROOT_DIR}/videotrans/styles/icon.ico"))
+        self.setupUi(self)
+    def setupUi(self, form):
         self.has_done = False
-        localllmform.setObjectName("localllmform")
-        localllmform.setWindowModality(QtCore.Qt.NonModal)
-        localllmform.resize(600, 600)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(localllmform.sizePolicy().hasHeightForWidth())
-        localllmform.setSizePolicy(sizePolicy)
-        localllmform.setMaximumSize(QtCore.QSize(600, 600))
+        form.setObjectName("form")
+        form.resize(600, 600)
 
-        v1 = QtWidgets.QVBoxLayout(localllmform)
+        v1 = QtWidgets.QVBoxLayout(form)
 
         h1 = QtWidgets.QHBoxLayout()
         h2 = QtWidgets.QHBoxLayout()
@@ -34,33 +33,33 @@ class Ui_localllmform(object):
 
         v1.addWidget(self.label_0)
 
-        self.label = QtWidgets.QLabel(localllmform)
+        self.label = QtWidgets.QLabel()
         self.label.setMinimumSize(QtCore.QSize(0, 35))
         self.label.setObjectName("label")
-        self.localllm_api = QtWidgets.QLineEdit(localllmform)
+        self.localllm_api = QtWidgets.QLineEdit()
         self.localllm_api.setMinimumSize(QtCore.QSize(0, 35))
         self.localllm_api.setObjectName("localllm_api")
         h1.addWidget(self.label)
         h1.addWidget(self.localllm_api)
         v1.addLayout(h1)
 
-        self.label_2 = QtWidgets.QLabel(localllmform)
+        self.label_2 = QtWidgets.QLabel()
         self.label_2.setMinimumSize(QtCore.QSize(0, 35))
         self.label_2.setSizeIncrement(QtCore.QSize(0, 35))
         self.label_2.setObjectName("label_2")
-        self.localllm_key = QtWidgets.QLineEdit(localllmform)
+        self.localllm_key = QtWidgets.QLineEdit()
         self.localllm_key.setMinimumSize(QtCore.QSize(0, 35))
         self.localllm_key.setObjectName("localllm_key")
         h2.addWidget(self.label_2)
         h2.addWidget(self.localllm_key)
 
         h_token = QtWidgets.QHBoxLayout()
-        label_token = QtWidgets.QLabel(localllmform)
+        label_token = QtWidgets.QLabel()
         label_token.setMinimumSize(QtCore.QSize(0, 35))
         label_token.setSizeIncrement(QtCore.QSize(0, 35))
         label_token.setObjectName("label_token")
         label_token.setText(tr("Maximum output token"))
-        self.localllm_max_token = QtWidgets.QLineEdit(localllmform)
+        self.localllm_max_token = QtWidgets.QLineEdit()
         self.localllm_max_token.setMinimumSize(QtCore.QSize(0, 35))
         self.localllm_max_token.setObjectName("localllm_max_token")
 
@@ -70,40 +69,48 @@ class Ui_localllmform(object):
 
         v1.addLayout(h2)
         v1.addLayout(h_token)
+        
+        hreason = QtWidgets.QHBoxLayout()
+        hreason.addWidget(QtWidgets.QLabel(tr('Reasoning Effort')))
+        self.reasoning_effort=QtWidgets.QComboBox()
+        self.reasoning_effort.addItems(['default','none','low','medium','high','max'])
+        self.reasoning_effort.setToolTip(tr('none_effort'))
+        hreason.addWidget(self.reasoning_effort)
+        v1.addLayout(hreason)
 
-        self.label_3 = QtWidgets.QLabel(localllmform)
+        self.label_3 = QtWidgets.QLabel()
         self.label_3.setObjectName("label_3")
-        self.localllm_model = QtWidgets.QComboBox(localllmform)
+        self.localllm_model = QtWidgets.QComboBox()
         self.localllm_model.setMinimumSize(QtCore.QSize(0, 35))
         self.localllm_model.setObjectName("localllm_model")
         h3.addWidget(self.label_3)
         h3.addWidget(self.localllm_model)
         v1.addLayout(h3)
 
-        self.label_allmodels = QtWidgets.QLabel(localllmform)
+        self.label_allmodels = QtWidgets.QLabel()
         self.label_allmodels.setObjectName("label_allmodels")
         self.label_allmodels.setText(
             tr("Fill in all available models, separated by commas. After filling in, you can select them above"))
         v1.addWidget(self.label_allmodels)
-        self.edit_allmodels = QtWidgets.QPlainTextEdit(localllmform)
+        self.edit_allmodels = QtWidgets.QPlainTextEdit()
         self.edit_allmodels.setObjectName("edit_allmodels")
         v1.addWidget(self.edit_allmodels)
 
-        self.label_4 = QtWidgets.QLabel(localllmform)
+        self.label_4 = QtWidgets.QLabel()
         self.label_4.setObjectName("label_4")
         v1.addWidget(self.label_4)
 
-        self.localllm_template = QtWidgets.QPlainTextEdit(localllmform)
+        self.localllm_template = QtWidgets.QPlainTextEdit()
         self.localllm_template.setObjectName("localllm_template")
         self.localllm_template.setReadOnly(True)
         v1.addWidget(self.localllm_template)
 
-        self.set_localllm = QtWidgets.QPushButton(localllmform)
+        self.set_localllm = QtWidgets.QPushButton()
 
         self.set_localllm.setMinimumSize(QtCore.QSize(0, 35))
         self.set_localllm.setObjectName("set_localllm")
 
-        self.test_localllm = QtWidgets.QPushButton(localllmform)
+        self.test_localllm = QtWidgets.QPushButton()
         self.test_localllm.setMinimumSize(QtCore.QSize(0, 30))
         self.test_localllm.setObjectName("test_localllm")
         help_btn = QtWidgets.QPushButton()
@@ -118,12 +125,12 @@ class Ui_localllmform(object):
         v1.addLayout(h4)
         self.localllm_template.setPlainText(tr("Prompt: Please open the {} file directly to modify it", 'localllm', 'localllm'))
 
-        self.retranslateUi(localllmform)
-        QtCore.QMetaObject.connectSlotsByName(localllmform)
+        self.retranslateUi(form)
+        QtCore.QMetaObject.connectSlotsByName(form)
 
     def update_ui(self):
         allmodels_str = settings.get('localllm_model','')
-        allmodels = str(settings.get('localllm_model','')).split(',')
+        allmodels = [x.strip() for x in str(settings.get('localllm_model','')).split(',')]
         self.localllm_model.clear()
         self.localllm_model.addItems(allmodels)
         self.edit_allmodels.setPlainText(str(allmodels_str))
@@ -131,10 +138,15 @@ class Ui_localllmform(object):
         self.localllm_api.setText(str(params.get("localllm_api",'')))
         self.localllm_model.setCurrentText(str(params.get("localllm_model",'')))
         self.localllm_max_token.setText(str(params.get("localllm_max_token",'')))
+        _effort=str(params.get("localllm_reasoning_effort","default"))
+        # 兼容旧版本
+        if _effort =='No':
+            _effort='default'
+        self.reasoning_effort.setCurrentText(_effort)
 
-    def retranslateUi(self, localllmform):
-        localllmform.setWindowTitle(tr("Local LLM API")+tr('This channel needs deployed and started before available'))
-        self.label_3.setText(tr("Model"))
+    def retranslateUi(self, form):
+        form.setWindowTitle(tr("Local LLM API")+tr('This channel needs deployed and started before available'))
+        self.label_3.setText(tr('Text  Or Srt  Translation')+tr("Model"))
         self.label_4.setText(
             tr("{lang} represents the target language name, do not delete it."))
         self.set_localllm.setText(tr("Save"))

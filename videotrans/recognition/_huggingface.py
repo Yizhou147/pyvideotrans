@@ -15,14 +15,13 @@ from videotrans.task.taskcfg import SrtItem
 from videotrans.util.help_down import check_and_down_hf
 
 
-@dataclass
+@dataclass(repr=False)
 class HuggingfaceRecogn(BaseRecogn):
 
     def __post_init__(self):
         super().__post_init__()
         self.local_dir = f'{ROOT_DIR}/models/models--' + self.model_name.replace('/', '--')
         self.signal(text=f"use {self.model_name}")
-        self.audio_duration=len(AudioSegment.from_wav(self.audio_file))
 
     def _download(self):
         check_and_down_hf(self.model_name,self.model_name,self.local_dir,callback=self._process_callback)
@@ -47,25 +46,25 @@ class HuggingfaceRecogn(BaseRecogn):
         kwargs = {
             "cut_audio_list": cut_audio_list_file,
             "prompt": settings.get(
-                f'initial_prompt_{self.detect_language}') if self.detect_language != 'auto' else None,
+                f'initial_prompt_{self.detect_language.replace("-","_")}') if self.detect_language and self.detect_language != 'auto' else None,
             "detect_language": self.detect_language,
             "model_name": self.model_name,
             "logs_file": logs_file,
             "is_cuda": self.is_cuda,
             "audio_file": None,
             "local_dir": self.local_dir,
-            "jianfan": self.jianfan
         }
-        from videotrans.process.stt_faster import faster_whisper
         from videotrans.process.stt_pipe import  pipe_asr
         from videotrans.process.stt_glmasr import glmasr_asr
         from videotrans.process.stt_arkasr import ark_asr
         from videotrans.process.stt_granite import granite_asr
+        from videotrans.process.stt_nemotron import nemotron_asr
         func_dict={
             "zai-org/GLM-ASR-Nano-2512":glmasr_asr,
             "Audio8/ARK-ASR-0.6B":ark_asr,
             "Audio8/ARK-ASR-3B":ark_asr,
             "ibm-granite/granite-speech-4.1-2b":granite_asr,
+            "nvidia/nemotron-3.5-asr-streaming-0.6b":nemotron_asr
         }
         
         raws=self._new_process(callback=func_dict.get(self.model_name,pipe_asr),title=title,is_cuda=self.is_cuda,kwargs=kwargs)

@@ -6,10 +6,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from videotrans.configure import contants
+from videotrans.configure import constants
 from videotrans.configure._paths import ROOT_DIR
 from videotrans.configure.config import tr, settings, logger
-from videotrans.configure.contants import WHISPER_CPP_URL_MS, WHISPER_CPP_URL_HF, WHISPERCPP_MODEL_URL_MS, \
+from videotrans.configure.constants import WHISPER_CPP_URL_MS, WHISPER_CPP_URL_HF, WHISPERCPP_MODEL_URL_MS, \
     WHISPERCPP_MODEL_URL_HF
 from videotrans.configure.excepts import SpeechToTextError
 from videotrans.recognition._base import BaseRecogn
@@ -18,12 +18,8 @@ from videotrans.util.help_down import down_zip
 from videotrans.util.help_misc import is_connect_hf
 
 
-@dataclass
+@dataclass(repr=False)
 class CPPRecogn(BaseRecogn):
-    def __post_init__(self):
-        super().__post_init__()
-        self.cpp_path=f'{ROOT_DIR}/whisper-cpp/whisper-cli'#whisper-cli.exe | whisper-cli
-
 
     def _win_download_cli(self):
         # windows上自动下载exe
@@ -32,9 +28,10 @@ class CPPRecogn(BaseRecogn):
 
 
     def _exec(self):
+        cpp_path=f'{ROOT_DIR}/whisper-cpp/whisper-cli'#whisper-cli.exe | whisper-cli
         if sys.platform=='win32':
-            self.cpp_path+='.exe'
-        Path_cpp=Path(self.cpp_path)
+            cpp_path+='.exe'
+        Path_cpp=Path(cpp_path)
         if not Path_cpp.is_file():
             if sys.platform!='win32':
                 raise SpeechToTextError(tr('download whisper.cpp or make binary',f'{ROOT_DIR}/whisper-cpp'))
@@ -50,10 +47,10 @@ class CPPRecogn(BaseRecogn):
                 f"{ROOT_DIR}/models",
                 [url],
                 self._process_callback)
-        txt_file = ROOT_DIR + '/pyvideotrans.txt'
+        txt_file = ROOT_DIR + '/pyvideotrans_cpp.txt'
 
         cmd = [
-            self.cpp_path,
+            cpp_path,
             "-p",str(max(min(4,int(os.cpu_count())-1),1)),
             "-f",
             self.audio_file,
@@ -65,12 +62,12 @@ class CPPRecogn(BaseRecogn):
         ]
         _lang=self.detect_language.split('-')[0]
         cmd += ["-l", _lang]
-        prompt = settings.get(f'initial_prompt_{self.detect_language}')
+        prompt = settings.get(f'initial_prompt_{self.detect_language.replace("-","_")}')
         if prompt:
             cmd += ['--prompt', prompt]
         if _lang.lower() !='auto':
             # 最多2倍设定字幕字符长度，防止过长
-            _ml=2*int(settings.get('cjk_len', 15) if _lang in contants.CJK_LANG else settings.get('other_len', 60))
+            _ml=2*int(settings.get('cjk_len', 15) if _lang in constants.CJK_LANG else settings.get('other_len', 60))
             cmd+=['-ml', str(_ml)]
 
         if txt_file and Path(txt_file).exists():

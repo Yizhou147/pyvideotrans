@@ -1,0 +1,68 @@
+import logging
+from dataclasses import dataclass
+from typing import Union, Dict, List
+
+import dashscope
+import requests
+from dashscope.common.error import AuthenticationError
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_not_exception_type, before_log, after_log
+from videotrans.configure.config import params, logger, settings
+from videotrans.configure.excepts import NO_RETRY_EXCEPT, StopTask
+from videotrans.tts._base import BaseTTS
+from videotrans import translator
+
+# 强制单线程 防止远端限制出错
+from videotrans.util.help_misc import vail_file
+from videotrans.util.help_role import get_qwen3tts_rolelist
+
+
+@dataclass(repr=False)
+class QWENTTS(BaseTTS):
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.role_dict=get_qwen3tts_rolelist()
+        self.api_key=params.get('bailian_key', '')
+        spaceid=params.get('bailian_spaceid', '').strip()
+
+        if spaceid and not spaceid.startswith('http'):
+            dashscope.base_http_api_url = f'https://{spaceid}.cn-beijing.maas.aliyuncs.com/api/v1'
+        elif spaceid and spaceid.startswith('http'):
+            dashscope.base_http_api_url = spaceid.strip().strip('/')
+
+        self.model=params.get('bailian_ttsmodel', 'qwen3-tts-flash')
+        if self.model.startswith('qwen-tts'):
+            self.model='qwen3-tts-flash'
+
+    def _run(self, data_item: Union[Dict, List, None], idx: int = -1) -> Union[str, None]:
+        if vail_file(data_item['filename']):return
+        role = self.role_dict.get(data_item['role'],'Cherry')
+        try:
+            logger.debug(f"[Qwen-TTS(bailian)]{self.model=},{self.api_key=},{role=},{data_item['text']=}")
+            response = dashscope.MultiModalConversation.call(
+                model=self.model,
+                # 新加坡和北京地域的API Key不同。获取API Key：https://help.aliyun.com/zh/model-studio/get-api-key
+                # 若没有配置环境变量，请用阿里云百炼API Key将下行替换为：api_key = "sk-xxx"
+                api_key=self.api_key,
+                text=data_item['text'],
+                voice=role,
+                language_type='Auto',
+                stream=False
+            )
+
+            if response is None:
+                return "API call returned None response"
+
+            if "Access denied" in response.message:
+                return response.message
+
+            if not hasattr(response, 'output') or response.output is None or not hasattr(response.output, 'audio'):
+                return  f"{response.message if hasattr(response, 'message') else str(response)}"
+
+            resurl = requests.get(response.output.audio["url"])
+            resurl.raise_for_status()  # 检查请求是否成功
+            with open(data_item['filename'] + '.wav', 'wb') as f:
+                f.write(resurl.content)
+            self.convert_to_wav(data_item['filename'] + ".wav", data_item['filename'])
+        except AuthenticationError as e:
+            raise StopTask(str(e))

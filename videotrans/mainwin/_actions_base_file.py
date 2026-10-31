@@ -1,20 +1,19 @@
-import os
-import shutil
-
+import time
 from pathlib import Path
 
 from PySide6 import QtWidgets
 from PySide6.QtCore import QTimer
 
 from videotrans.configure.config import tr, settings, params, app_cfg, ROOT_DIR, TEMP_ROOT
-from videotrans.configure import contants
-from videotrans.util.help_misc import show_popup, set_proxy, set_process
+from videotrans.configure import constants
+from videotrans.util._srt_parse import ass_to_srt
+from videotrans.util.help_misc import  set_proxy, set_process
 
 
 class WinActionBaseFileMixin:
 
     def get_mp4(self):
-        allowed_exts = contants.VIDEO_EXTS + contants.AUDIO_EXITS
+        allowed_exts = constants.VIDEO_EXTS + constants.AUDIO_EXITS
         format_str = " ".join(['*.' + f for f in allowed_exts])
         mp4_list = []
         if self.main.select_file_type.isChecked():
@@ -68,7 +67,7 @@ class WinActionBaseFileMixin:
         params.save()
 
     def get_background(self):
-        format_str = " ".join(['*.' + f for f in contants.AUDIO_EXITS])
+        format_str = " ".join(['*.' + f for f in constants.AUDIO_EXITS])
         fname, _ = QtWidgets.QFileDialog.getOpenFileName(self.main, 'Background music', params.get('last_opendir', ''),
                                                           f"Audio files({format_str})")
         if not fname:
@@ -106,39 +105,31 @@ class WinActionBaseFileMixin:
                     set_process(text=test_proxy, type="proxy_error")
         threading.Thread(target=_curl).start()
 
-    def proxy_alert(self):
-        from videotrans.component.set_proxy import SetThreadProxy
-        dialog = SetThreadProxy()
-        if dialog.exec():
-            proxy = dialog.get_values()
-            self.main.proxy.setText(proxy)
-
-    def clearcache(self):
-        question = show_popup(tr('Confirm cleanup?'),
-                                    tr('After cleaning, you need to restart the software. Only cache and temporary files are cleaned. For configuration information, please directly delete the .json in the videotrans folder.'))
-
-        if int(question) == int(QtWidgets.QMessageBox.Yes):
-            os.chdir(ROOT_DIR)
-            self._clean_dir()
-
-    def _clean_dir(self):
-        for it in Path(TEMP_ROOT).iterdir():
-            shutil.rmtree(it, ignore_errors=True)
-
-        Path(ROOT_DIR + "/videotrans/codec.json").unlink(missing_ok=True)
-        Path(ROOT_DIR + "/videotrans/ass.json").unlink(missing_ok=True)
-        self.main.restart_app()
-
-
-    def import_srtfile(self):
-        fname,_ = QtWidgets.QFileDialog.getOpenFileName(self.main,
-                                                                tr("Import SRT(only effective for single-video)"),
-                                                                params.get('last_opendir', ''),
-                                                                f'Files(*.srt)')
-        app_cfg.onlyone_importsrtfile=None
-        self.main.subtitle_area.clear()
-        if fname:
-            app_cfg.onlyone_importsrtfile=fname            
-            self.main.subtitle_area.insertPlainText(f'{tr("Import SRT(only effective for single-video)")}\n{tr("For instructions on importing local SRT files during batch translation")}\n\n'+Path(fname).read_text(encoding='utf-8'))
+    def import_srtfile(self,srt_type='spoken'):
+        _title=tr('Import spoken SRT') if srt_type=='spoken' else tr('Import target language SRT')
         
-        #params['last_opendir'] = Path(mp4_list[0]).parent.resolve().as_posix()
+        fname,_ = QtWidgets.QFileDialog.getOpenFileName(self.main,
+                                                                _title,
+                                                                params.get('last_opendir', ''),
+                                                                f'Files(*.srt *.ass)')
+        if srt_type=='spoken' and fname.endswith(".ass"):
+            _new=TEMP_ROOT+f"/from-ass-spoken-{time.time()}.srt"
+            ass_to_srt(fname,_new,True)
+            fname=_new
+
+        if srt_type=='spoken':
+            app_cfg.onlyone_importsrtfile=fname if fname else None        
+        else:
+            app_cfg.onlyone_importsrtfile_target=fname if fname else None        
+        
+        
+        self.main.subtitle_area.clear()
+        _content=""
+        if app_cfg.onlyone_importsrtfile:
+            _content+=f'\n[{tr("Import spoken SRT")}]\n'+Path(app_cfg.onlyone_importsrtfile).read_text(encoding='utf-8')
+        if app_cfg.onlyone_importsrtfile_target:
+            _content+=f'\n[{tr("Import target language SRT")}]\n'+Path(app_cfg.onlyone_importsrtfile_target).read_text(encoding='utf-8')
+        if _content:
+            self.main.subtitle_area.insertPlainText(_content)
+        
+            

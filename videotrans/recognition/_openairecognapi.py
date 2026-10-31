@@ -18,20 +18,19 @@ from videotrans.util._ffmpeg_runner import runffmpeg
 from videotrans.util._srt_parse import ms_to_time_string
 
 
-@dataclass
+@dataclass(repr=False)
 class OpenaiAPIRecogn(BaseRecogn):
 
     def __post_init__(self):
         super().__post_init__()
-        self.api_url = params.get('openairecognapi_url', '')
+        self.api_url = params.get('openairecognapi_api', '')
 
 
     def _exec(self) -> Union[List[SrtItem], None]:
         if self._exit(): return
-        model_name = params.get("openairecognapi_model", '')
         # 如果是 gpt-4o-transcribe-diarize 说话人识别默认
         try:
-            if model_name.lower() == 'gpt-4o-transcribe-diarize':
+            if self.model_name.lower() == 'gpt-4o-transcribe-diarize':
                 return self._diarize()
             
             # 如果是第三方
@@ -60,7 +59,7 @@ class OpenaiAPIRecogn(BaseRecogn):
             with open(self.audio_file, 'rb') as file:
                 transcript = client.audio.transcriptions.create(
                     file=(os.path.basename(self.audio_file), file.read()),
-                    model=model_name,
+                    model=self.model_name,
                     prompt=params.get('openairecognapi_prompt', ''),
                     language=self.detect_language.split('-')[0],
                     response_format="verbose_json",
@@ -98,7 +97,7 @@ class OpenaiAPIRecogn(BaseRecogn):
             with open(it['filename'], 'rb') as file:
                 transcript = client.audio.transcriptions.create(
                     file=(os.path.basename(it['filename']), file.read()),
-                    model=params.get("openairecognapi_model", 'whisper-1'),
+                    model=self.model_name,
                     prompt=params.get('openairecognapi_prompt', ''),
                     # timeout=7200,
                     language=self.detect_language.split('-')[0],
@@ -122,7 +121,7 @@ class OpenaiAPIRecogn(BaseRecogn):
         with open(self.audio_file, 'rb') as file:
             transcript = client.audio.transcriptions.create(
                 file=(os.path.basename(self.audio_file), file.read()),
-                model='gpt-4o-transcribe-diarize',
+                model=self.model_name,
                 language=self.detect_language.split('-')[0],
                 chunking_strategy="auto",
                 response_format="diarized_json"

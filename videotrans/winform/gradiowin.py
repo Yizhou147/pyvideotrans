@@ -1,7 +1,8 @@
 
 
 def openwin():
-    from videotrans.configure.contants import LISTEN_TEXT
+    from videotrans.winform import get_cls
+    from videotrans.configure.constants import LISTEN_TEXT
     from videotrans.util.help_misc import set_process, show_error
     from videotrans.util.help_role import get_f5tts_role
     from videotrans.configure.config import ROOT_DIR,tr,app_cfg, params
@@ -24,14 +25,14 @@ def openwin():
 
 
     def test(tts_type=tts.INDEX_TTS):
-        index_tts_version = winobj.index_tts_version.currentIndex()
+        indexttsversion = winobj.indextts_version.currentIndex()
         # 通用
-        params["index_tts_version"] = index_tts_version
-        params["voxcpmtts_version"] = winobj.voxcpmtts_version.currentText()
-        params["voxcpmtts_url"] = winobj.voxcpmtts_url.text()
+        params["index_version"] = indexttsversion
+        params["voxcpm_version"] = winobj.voxcpmtts_version.currentText()
+        params["voxcpm_url"] = winobj.voxcpmtts_url.text()
         params["firered3tts_url"] = winobj.firered3tts_url.text()
-        params["indextts_url"] = winobj.indextts_url.text()
-        params["sparktts_url"] = winobj.sparktts_url.text()
+        params["index_url"] = winobj.indextts_url.text()
+        params["spark_url"] = winobj.sparktts_url.text()
         params.save()
         
         _rolename = next(reversed(get_f5tts_role().values()))
@@ -53,30 +54,30 @@ def openwin():
 
     def save():
 
-        index_tts_version = winobj.index_tts_version.currentIndex()
-        params["index_tts_version"] = index_tts_version
-        params["voxcpmtts_version"] = winobj.voxcpmtts_version.currentText()
+        indextts_version = winobj.indextts_version.currentIndex()
+        params["index_version"] = indextts_version
+        params["voxcpm_version"] = winobj.voxcpmtts_version.currentText()
         
-        params["voxcpmtts_url"] = winobj.voxcpmtts_url.text()
+        params["voxcpm_url"] = winobj.voxcpmtts_url.text()
         params["firered3tts_url"] = winobj.firered3tts_url.text()
-        params["indextts_url"] = winobj.indextts_url.text()
-        params["sparktts_url"] = winobj.sparktts_url.text()
+        params["index_url"] = winobj.indextts_url.text()
+        params["spark_url"] = winobj.sparktts_url.text()
 
 
         params.save()
         set_process(text='', type="refreshtts")
         winobj.close()
 
-    from videotrans.component.set_form import GradiowinForm
+
     Path(ROOT_DIR + "/f5-tts").mkdir(exist_ok=True)
-    winobj = GradiowinForm()
-    app_cfg.child_forms['gradiowin'] = winobj
-    winobj.index_tts_version.setCurrentIndex(int(params.get('index_tts_version',0)))
-    winobj.voxcpmtts_version.setCurrentText(str(params.get('voxcpmtts_version','v2')))
+    winobj = get_cls(Path(__file__).stem)()
+
+    winobj.indextts_version.setCurrentIndex(int(params.get('index_version',0)))
+    winobj.voxcpmtts_version.setCurrentText(str(params.get('voxcpm_version','v2')))
     
-    winobj.sparktts_url.setText(str(params.get('sparktts_url','')))
-    winobj.indextts_url.setText(str(params.get('indextts_url','')))
-    winobj.voxcpmtts_url.setText(str(params.get('voxcpmtts_url','')))
+    winobj.sparktts_url.setText(str(params.get('spark_url','')))
+    winobj.indextts_url.setText(str(params.get('index_url','')))
+    winobj.voxcpmtts_url.setText(str(params.get('voxcpm_url','')))
     winobj.firered3tts_url.setText(str(params.get('firered3tts_url','')))
 
     winobj.save.clicked.connect(save)
@@ -84,10 +85,10 @@ def openwin():
     winobj.indextts_urltest.clicked.connect(lambda: test(tts.INDEX_TTS))
     winobj.voxcpmtts_urltest.clicked.connect(lambda: test(tts.VOXCPM_TTS))
     winobj.firered3tts_urltest.clicked.connect(lambda: test(tts.FIRERED3_TTS))
-    winobj.show()
     test_btn={
         tts.INDEX_TTS:winobj.indextts_urltest,
         tts.SPARK_TTS:winobj.sparktts_urltest,
         tts.VOXCPM_TTS:winobj.voxcpmtts_urltest,
         tts.FIRERED3_TTS:winobj.firered3tts_urltest,
     }
+    return winobj

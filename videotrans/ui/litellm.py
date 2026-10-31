@@ -3,24 +3,24 @@
 
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import Qt
-from videotrans.configure.config import tr, settings, params
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QDialog
+
+from videotrans.configure.config import tr, settings, params, ROOT_DIR
 from videotrans.util.help_misc import open_url
 
 
-class Ui_litellmform(object):
-    def setupUi(self, litellmform):
+class Ui_litellm(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowIcon(QIcon(f"{ROOT_DIR}/videotrans/styles/icon.ico"))
+        self.setupUi(self)
+    def setupUi(self, form):
         self.has_done = False
-        litellmform.setObjectName("litellmform")
-        litellmform.setWindowModality(QtCore.Qt.NonModal)
-        litellmform.resize(600, 600)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(litellmform.sizePolicy().hasHeightForWidth())
-        litellmform.setSizePolicy(sizePolicy)
-        litellmform.setMaximumSize(QtCore.QSize(600, 600))
+        form.setObjectName("form")
+        form.resize(600, 600)
 
-        v1 = QtWidgets.QVBoxLayout(litellmform)
+        v1 = QtWidgets.QVBoxLayout(form)
         h_url = QtWidgets.QHBoxLayout()
         h2 = QtWidgets.QHBoxLayout()
 
@@ -32,10 +32,10 @@ class Ui_litellmform(object):
         self.label_0.setText('LiteLLM')
         v1.addWidget(self.label_0)
 
-        self.label_url = QtWidgets.QLabel(litellmform)
+        self.label_url = QtWidgets.QLabel()
         self.label_url.setMinimumSize(QtCore.QSize(0, 35))
         self.label_url.setObjectName("label_url")
-        self.litellm_api = QtWidgets.QLineEdit(litellmform)
+        self.litellm_api = QtWidgets.QLineEdit()
         self.litellm_api.setMinimumSize(QtCore.QSize(0, 35))
         self.litellm_api.setObjectName("litellm_api")
         self.litellm_api.setPlaceholderText('http://localhost:4000/v1')
@@ -43,11 +43,11 @@ class Ui_litellmform(object):
         h_url.addWidget(self.litellm_api)
         v1.addLayout(h_url)
 
-        self.label_2 = QtWidgets.QLabel(litellmform)
+        self.label_2 = QtWidgets.QLabel()
         self.label_2.setMinimumSize(QtCore.QSize(0, 35))
         self.label_2.setSizeIncrement(QtCore.QSize(0, 35))
         self.label_2.setObjectName("label_2")
-        self.litellm_key = QtWidgets.QLineEdit(litellmform)
+        self.litellm_key = QtWidgets.QLineEdit()
         self.litellm_key.setMinimumSize(QtCore.QSize(0, 35))
         self.litellm_key.setObjectName("litellm_key")
         h2.addWidget(self.label_2)
@@ -70,14 +70,15 @@ class Ui_litellmform(object):
         hreason = QtWidgets.QHBoxLayout()
         hreason.addWidget(QtWidgets.QLabel(tr('Reasoning Effort')))
         self.reasoning_effort = QtWidgets.QComboBox()
-        self.reasoning_effort.addItems(['No', 'low', 'medium', 'high'])
+        self.reasoning_effort.addItems(['default','none', 'low', 'medium', 'high','max'])
+        self.reasoning_effort.setToolTip(tr('none_effort'))
         hreason.addWidget(self.reasoning_effort)
         v1.addLayout(hreason)
 
         h_model = QtWidgets.QHBoxLayout()
         self.label_selectmodel = QtWidgets.QLabel()
         self.label_selectmodel.setObjectName("label_selectmodel")
-        self.label_selectmodel.setText(tr("Select model"))
+        self.label_selectmodel.setText(tr('Text  Or Srt  Translation')+tr("Model"))
         self.litellm_model = QtWidgets.QComboBox()
         self.litellm_model.setMinimumSize(QtCore.QSize(0, 35))
         self.litellm_model.setObjectName("litellm_model")
@@ -95,16 +96,16 @@ class Ui_litellmform(object):
         self.edit_allmodels.setObjectName("edit_allmodels")
         v1.addWidget(self.edit_allmodels)
 
-        self.label_4 = QtWidgets.QLabel(litellmform)
+        self.label_4 = QtWidgets.QLabel()
         self.label_4.setObjectName("label_4")
 
-        self.template = QtWidgets.QPlainTextEdit(litellmform)
+        self.template = QtWidgets.QPlainTextEdit()
         self.template.setObjectName("template")
         self.template.setReadOnly(True)
         v1.addWidget(self.label_4)
         v1.addWidget(self.template)
 
-        self.set = QtWidgets.QPushButton(litellmform)
+        self.set = QtWidgets.QPushButton()
         self.set.setMinimumSize(QtCore.QSize(0, 35))
         self.set.setObjectName("set")
 
@@ -127,12 +128,12 @@ class Ui_litellmform(object):
         v1.addLayout(h4)
         self.template.setPlainText(tr("Prompt: Please open the {} file directly to modify it", 'litellm', 'litellm'))
 
-        self.retranslateUi(litellmform)
-        QtCore.QMetaObject.connectSlotsByName(litellmform)
+        self.retranslateUi(form)
+        QtCore.QMetaObject.connectSlotsByName(form)
 
     def update_ui(self):
         allmodels_str = settings.get('litellm_model', '')
-        allmodels = str(settings.get('litellm_model', '')).split(',')
+        allmodels = [x.strip() for x in str(settings.get('litellm_model', '')).split(',')]
         self.litellm_model.clear()
         self.litellm_model.addItems(allmodels)
         self.edit_allmodels.setPlainText(allmodels_str)
@@ -141,10 +142,10 @@ class Ui_litellmform(object):
         self.litellm_key.setText(str(params.get("litellm_key", '')))
         self.litellm_model.setCurrentText(params.get("litellm_model", ''))
         self.max_token.setText(str(params.get("litellm_max_token", '')))
-        self.reasoning_effort.setCurrentText(params.get("litellm_reasoning_effort", "No"))
+        self.reasoning_effort.setCurrentText(str(params.get("litellm_reasoning_effort","default")))
 
-    def retranslateUi(self, litellmform):
-        litellmform.setWindowTitle("LiteLLM")
+    def retranslateUi(self, form):
+        form.setWindowTitle("LiteLLM")
         self.label_url.setText(tr("API URL"))
         self.label_2.setText(tr("SK"))
         self.label_4.setText(tr("{lang} represents the target language name, do not delete it."))

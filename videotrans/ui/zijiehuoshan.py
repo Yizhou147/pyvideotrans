@@ -2,44 +2,43 @@
 
 
 from PySide6 import QtCore, QtWidgets
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QDialog
 
-from videotrans.configure.config import tr, params, settings
+from videotrans.configure.config import tr, params, settings, ROOT_DIR
 from videotrans.util.help_misc import open_url
 
 
-class Ui_zijiehuoshanform(object):
-    def setupUi(self, zijiehuoshanform):
+class Ui_zijiehuoshan(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowIcon(QIcon(f"{ROOT_DIR}/videotrans/styles/icon.ico"))
+        self.setupUi(self)
+    def setupUi(self, form):
         self.has_done = False
-        zijiehuoshanform.setObjectName("zijiehuoshanform")
-        zijiehuoshanform.setWindowModality(QtCore.Qt.NonModal)
-        zijiehuoshanform.resize(600, 570)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(zijiehuoshanform.sizePolicy().hasHeightForWidth())
-        zijiehuoshanform.setSizePolicy(sizePolicy)
-        zijiehuoshanform.setMaximumSize(QtCore.QSize(600, 570))
+        form.setObjectName("form")
+        form.resize(600, 570)
 
-        v1 = QtWidgets.QVBoxLayout(zijiehuoshanform)
+        v1 = QtWidgets.QVBoxLayout(form)
         h1 = QtWidgets.QHBoxLayout()
         h2 = QtWidgets.QHBoxLayout()
         h3 = QtWidgets.QHBoxLayout()
 
-        self.label_2 = QtWidgets.QLabel(zijiehuoshanform)
+        self.label_2 = QtWidgets.QLabel()
         self.label_2.setMinimumSize(QtCore.QSize(0, 35))
         self.label_2.setSizeIncrement(QtCore.QSize(0, 35))
         self.label_2.setObjectName("label_2")
-        self.zijiehuoshan_key = QtWidgets.QLineEdit(zijiehuoshanform)
+        self.zijiehuoshan_key = QtWidgets.QLineEdit()
         self.zijiehuoshan_key.setMinimumSize(QtCore.QSize(0, 35))
         self.zijiehuoshan_key.setObjectName("zijiehuoshan_key")
         h1.addWidget(self.label_2)
         h1.addWidget(self.zijiehuoshan_key)
         v1.addLayout(h1)
 
-        self.label_3 = QtWidgets.QLabel(zijiehuoshanform)
+        self.label_3 = QtWidgets.QLabel()
         self.label_3.setObjectName("label_3")
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-        self.zijiehuoshan_model = QtWidgets.QComboBox(zijiehuoshanform)
+        self.zijiehuoshan_model = QtWidgets.QComboBox()
         self.zijiehuoshan_model.setMinimumSize(QtCore.QSize(0, 35))
         self.zijiehuoshan_model.setObjectName("zijiehuoshan_model")
         self.zijiehuoshan_model.setSizePolicy(sizePolicy)
@@ -50,49 +49,51 @@ class Ui_zijiehuoshanform(object):
         h_max_token = QtWidgets.QHBoxLayout()
         label_token = QtWidgets.QLabel()
         label_token.setObjectName("label_token")
-        label_token.setText("MaxOutToken")
+        label_token.setText(tr('Maximum output token'))
         self.huoshan_max_token = QtWidgets.QLineEdit()
         self.huoshan_max_token.setMinimumSize(QtCore.QSize(0, 35))
         self.huoshan_max_token.setObjectName("huoshan_max_token")
         
-        self.huoshan_thinking = QtWidgets.QCheckBox()
-        self.huoshan_thinking.setObjectName("huoshan_thinking")
-        self.huoshan_thinking.setText("Thinking")
         h_max_token.addWidget(label_token)
         h_max_token.addWidget(self.huoshan_max_token)
-        h_max_token.addWidget(self.huoshan_thinking)
         v1.addLayout(h2)
         v1.addLayout(h_max_token)
 
-        self.label_allmodels = QtWidgets.QLabel(zijiehuoshanform)
+        hreason = QtWidgets.QHBoxLayout()
+        hreason.addWidget(QtWidgets.QLabel(tr('Reasoning Effort')))
+        self.reasoning_effort=QtWidgets.QComboBox()
+        self.reasoning_effort.addItems(['default','none','low','medium','high','max'])
+        self.reasoning_effort.setToolTip(tr('none_effort'))
+        hreason.addWidget(self.reasoning_effort)
+        v1.addLayout(hreason)
+
+        self.label_allmodels = QtWidgets.QLabel()
         self.label_allmodels.setObjectName("label_allmodels")
         self.label_allmodels.setText(tr('Fill in all inference access points, and you can select them above'))
         v1.addWidget(self.label_allmodels)
 
-        self.edit_allmodels = QtWidgets.QPlainTextEdit(zijiehuoshanform)
+        self.edit_allmodels = QtWidgets.QPlainTextEdit()
         self.edit_allmodels.setObjectName("edit_allmodels")
         v1.addWidget(self.edit_allmodels)
 
-        self.label_4 = QtWidgets.QLabel(zijiehuoshanform)
-        # self.label_4.setGeometry(QtCore.QRect(10, 285, 571, 21))
+        self.label_4 = QtWidgets.QLabel()
         self.label_4.setObjectName("label_4")
         v1.addWidget(self.label_4)
 
-        self.zijiehuoshan_template = QtWidgets.QPlainTextEdit(zijiehuoshanform)
-        # self.zijiehuoshan_template.setGeometry(QtCore.QRect(10, 310, 571, 151))
+        self.zijiehuoshan_template = QtWidgets.QPlainTextEdit()
         self.zijiehuoshan_template.setObjectName("zijiehuoshan_template")
         self.zijiehuoshan_template.setReadOnly(True)
         v1.addWidget(self.zijiehuoshan_template)
 
-        self.set_zijiehuoshan = QtWidgets.QPushButton(zijiehuoshanform)
+        self.set_zijiehuoshan = QtWidgets.QPushButton()
         self.set_zijiehuoshan.setMinimumSize(QtCore.QSize(0, 35))
         self.set_zijiehuoshan.setObjectName("set_zijiehuoshan")
 
-        self.test_zijiehuoshan = QtWidgets.QPushButton(zijiehuoshanform)
+        self.test_zijiehuoshan = QtWidgets.QPushButton()
         self.test_zijiehuoshan.setMinimumSize(QtCore.QSize(0, 30))
         self.test_zijiehuoshan.setObjectName("test_zijiehuoshan")
 
-        self.label_0 = QtWidgets.QPushButton(zijiehuoshanform)
+        self.label_0 = QtWidgets.QPushButton()
         self.label_0.setText(tr('Click to open help page'))
         self.label_0.setStyleSheet("background-color: rgba(255, 255, 255,0);text-align:left")
         self.label_0.clicked.connect(lambda: open_url('https://pyvideotrans.com/zijiehuoshan'))
@@ -103,12 +104,12 @@ class Ui_zijiehuoshanform(object):
         v1.addLayout(h3)
 
         self.zijiehuoshan_template.setPlainText(tr("Prompt: Please open the {} file directly to modify it", 'zijie', 'zijie'))
-        self.retranslateUi(zijiehuoshanform)
-        QtCore.QMetaObject.connectSlotsByName(zijiehuoshanform)
+        self.retranslateUi(form)
+        QtCore.QMetaObject.connectSlotsByName(form)
 
     def update_ui(self):
         allmodels_str = str(settings.get('zijiehuoshan_model',''))
-        allmodels = str(settings.get('zijiehuoshan_model','')).split(',')
+        allmodels = [x.strip() for x in str(settings.get('zijiehuoshan_model','')).split(',')]
         self.zijiehuoshan_model.clear()
         self.zijiehuoshan_model.addItems(allmodels)
         self.edit_allmodels.setPlainText(allmodels_str)
@@ -116,8 +117,11 @@ class Ui_zijiehuoshanform(object):
         self.zijiehuoshan_key.setText(str(params.get("zijiehuoshan_key",'')))
         if params.get("zijiehuoshan_model",'') in allmodels:
             self.zijiehuoshan_model.setCurrentText(params.get("zijiehuoshan_model",''))
-    def retranslateUi(self, zijiehuoshanform):
-        zijiehuoshanform.setWindowTitle(tr("ByteDance Ark"))
+        self.reasoning_effort.setCurrentText(params.get("zijiehuoshan_reasoning_effort","default"))
+        self.huoshan_max_token.setText(str(params.get('zijiehuoshan_max_token',32768)))
+
+    def retranslateUi(self, form):
+        form.setWindowTitle(tr("ByteDance Ark"))
         self.label_3.setText(tr('Selecting an Inference Access Point'))
         self.label_4.setText(tr("{lang} represents the target language name, do not delete it."))
         self.set_zijiehuoshan.setText(tr('Save'))

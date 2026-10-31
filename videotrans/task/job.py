@@ -1,4 +1,4 @@
-import traceback
+import traceback,os
 from queue import Empty
 
 from PySide6.QtCore import QThread
@@ -41,23 +41,19 @@ class BaseWorker(QThread):
 
     def handle_error(self, e, trk):
         """统一的错误处理逻辑"""
-        logger.error(f'{trk=}')
         logger.exception(e, exc_info=True)
         # 简单的错误消息
         except_msg = get_msg_from_except(e)
         # 错误堆栈
         detail_back = "\n".join(traceback.format_exception(e)).strip()
-        if not except_msg:
-            except_msg = detail_back.split("\n")[-1]
 
         # 获取子类可能自定义的错误前缀 (如识别引擎名称、动作名称)
         prefix = self.get_error_prefix(trk)
-        if prefix:
-            except_msg = f"{prefix} {except_msg}"
+
         if trk.uuid not in app_cfg.stoped_uuid_set:
             if app_cfg.exit_soft: return
-            trk.signal(text=f'{except_msg}\n{detail_back}\n{trk}', type='error', uuid=trk.uuid)
-            send_notification(f'Error:{e}', f'{trk.cfg.basename}')
+            trk.signal(text=f'{prefix} {except_msg}\n{detail_back}\n{trk=}', type='error', uuid=trk.uuid)
+            send_notification(f'Error:{except_msg[:90]}', f'{trk.cfg.basename}')
         trk.set_end()
         self.cleanup_on_error(trk)
 
@@ -161,6 +157,8 @@ class WorkerAlign(BaseWorker):
     def __init__(self):
         super().__init__("AlignVieoAudioSrt", app_cfg.align_queue)
 
+    def get_error_prefix(self, trk):
+        return f'{tr("Sound & video speed alignment stage")} {tr("anerror")}'
     def process_task(self, trk):
         trk.align()
         if hasattr(trk, 'recogn2pass'):
@@ -207,31 +205,47 @@ class WorkerTaskDone(BaseWorker):
 
 def start_thread():
     gpus.getset_gpu()
-    task_nums = 1
-    # 存在可用显卡时，进一步判断应该启动几个相关线程
+    cpu_count = max(int(os.cpu_count()),1)
+
+    # 不存在时固定为1，存在可用显卡时，进一步判断应该启动几个GPU进程,  1->min(CPU核数,8)
     if app_cfg.NVIDIA_GPU_NUMS > 0:
         try:
-            process_max_gpu = int(float(settings.get('process_max_gpu', 0)))
+            app_cfg.MAX_GPU_PROCESS =  min(cpu_count,8,max(1,int(float(settings.get('process_max_gpu', 0))) ))
         except (TypeError,ValueError):
-            process_max_gpu = 1
-        # 如果手动设置了gpu进程数量
-        if process_max_gpu > 0:
-            task_nums = process_max_gpu
-        elif app_cfg.NVIDIA_GPU_NUMS > 1 and bool(settings.get('multi_gpus')):
-            # 显卡数量真的大于1 并且 启用了多显卡，
-            task_nums = 2 if app_cfg.NVIDIA_GPU_NUMS < 4 else 4
-        logger.debug(f'最大允许GPU进程[0为不限制]:{process_max_gpu}, 是否多显卡模式:{settings.get("multi_gpus")}, {task_nums=} ')
-    logger.debug(f'最大允许CPU进程[0为不限制]: {settings.get("process_max")}, {task_nums=}')
+            app_cfg.MAX_GPU_PROCESS = 1
+
+    
+    # CPU进程数 1-> min(8,CPU核数,内存/1G)
+    try:
+        app_cfg.MAX_CPU_PROCESS = int(float(settings.get('process_max', 0)))
+    except (ValueError, TypeError):
+        app_cfg.MAX_CPU_PROCESS = 0
+    if app_cfg.MAX_CPU_PROCESS > 0:
+        # 最小1个
+        app_cfg.MAX_CPU_PROCESS=int(min(app_cfg.MAX_CPU_PROCESS, 8, cpu_count))
+    else:
+        import psutil
+        mem = psutil.virtual_memory()
+        # 最多8个进程,最小1个
+        _max=max( int( (mem.available / (1024 ** 3)) // 4 ),1)
+        app_cfg.MAX_CPU_PROCESS=int(min( _max , 8, cpu_count))
+    
+    #最少1个，最多4个，跟随 CPU GPU 进程最大数 1-> min(CPU和GPU进程最大值,4)
+    task_nums = min(max(app_cfg.MAX_GPU_PROCESS,app_cfg.MAX_CPU_PROCESS,1),4)
+    
+    
+    logger.debug(f'{cpu_count=},{app_cfg.MAX_GPU_PROCESS=}, {app_cfg.MAX_CPU_PROCESS=}, {task_nums=} ')
+
     worker_config = {
         WorkerPrepare: task_nums,  # 准备工作
         WorkerRegcon: task_nums,  # 语音识别
         WorkerDiariz: task_nums,
-        WorkerTrans: 1,
-        WorkerDubb: 1,
+        WorkerTrans: task_nums,
+        WorkerDubb: task_nums,
         WorkerRegcon2Pass: 1,
-        WorkerAlign: 1,
+        WorkerAlign: task_nums,
         WorkerAssemb: task_nums,
-        WorkerTaskDone: 1,
+        WorkerTaskDone: task_nums
     }
 
     workers = []

@@ -1,15 +1,16 @@
 
 
 def openwin():
-    from videotrans.configure.contants import LISTEN_TEXT
+    from pathlib import Path
+    from videotrans.winform import get_cls
+    from videotrans.configure.constants import LISTEN_TEXT
     from videotrans.configure.config import tr,app_cfg,params
     from videotrans.util.help_misc import set_process, show_error
     from videotrans.configure import config
     from videotrans.util.ListenVoice import ListenVoice
-    from videotrans.component.set_form import KokoroForm
 
-    winobj = KokoroForm()
-    app_cfg.child_forms['kokoro'] = winobj
+
+    winobj = get_cls(Path(__file__).stem)()
 
     def feed(d):
         if d == "ok":
@@ -26,6 +27,7 @@ def openwin():
 
     def test():
         params['kokoro_api'] = _fix_url(winobj.kokoro_address.text().strip())
+        params.save()
         winobj.test.setText(tr("Testing..."))
         from videotrans import tts
         import time
@@ -48,4 +50,4 @@ def openwin():
     winobj.kokoro_address.setText(str(params.get("kokoro_api",'')))
     winobj.set_kokoro.clicked.connect(save)
     winobj.test.clicked.connect(test)
-    winobj.show()
+    return winobj

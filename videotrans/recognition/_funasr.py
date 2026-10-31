@@ -11,10 +11,8 @@ from videotrans.util.help_down import check_and_down_ms,check_and_down_hf
 from videotrans.util.help_misc import is_connect_hf
 
 
-@dataclass
+@dataclass(repr=False)
 class FunasrRecogn(BaseRecogn):
-    
-
 
     def _exec(self) -> Union[List[SrtItem], None]:
         if self._exit():
@@ -35,14 +33,20 @@ class FunasrRecogn(BaseRecogn):
                 self.model_name = f'FunAudioLLM/Fun-ASR-Nano-2512'
         elif self.model_name != 'paraformer-zh':
             self.model_name = f'FunAudioLLM/Fun-ASR-MLT-Nano-2512'
-
+        
+        # 固定从 modelscope.cn 下载
         if self.model_name == 'paraformer-zh':
             check_and_down_ms(model_id='iic/speech_fsmn_vad_zh-cn-16k-common-pytorch',callback=self._process_callback,local_dir=f'{ROOT_DIR}/models/speech_fsmn_vad_zh-cn-16k-common-pytorch')
             check_and_down_ms(model_id='iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch',callback=self._process_callback,local_dir=f'{ROOT_DIR}/models/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch')
             check_and_down_ms(model_id='damo/speech_campplus_sv_zh-cn_16k-common',callback=self._process_callback,local_dir=f'{ROOT_DIR}/models/speech_campplus_sv_zh-cn_16k-common')
-        elif not is_connect_hf():
+        # 其他模型不能连接 hf时也从 modelscope.cn 下载
+        elif  not is_connect_hf():
             check_and_down_ms(model_id=self.model_name,callback=self._process_callback,local_dir=f'{ROOT_DIR}/models/'+self.model_name.split('/')[-1])
+        # 能连接hf，并且名字为iic/SenseVoiceSmall 需改为 FunAudioLLM/SenseVoiceSmall 
+        elif self.model_name == 'iic/SenseVoiceSmall':
+            check_and_down_hf(model_id='FunAudioLLM/SenseVoiceSmall',repo_id='FunAudioLLM/SenseVoiceSmall',callback=self._process_callback,local_dir=f'{ROOT_DIR}/models/'+self.model_name.split('/')[-1])
         else:
+            # 其他模型均从hf下载
             check_and_down_hf(model_id=self.model_name,repo_id=self.model_name,callback=self._process_callback,local_dir=f'{ROOT_DIR}/models/'+self.model_name.split('/')[-1])
         self.signal(text=f"load {self.model_name}")
         logs_file = f'{config.TEMP_DIR}/{self.uuid}/funasr-{self.detect_language}-{time.time()}.log'

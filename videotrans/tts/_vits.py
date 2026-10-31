@@ -5,7 +5,7 @@ from pathlib import Path
 
 from videotrans.configure._i18n import tr
 from videotrans.configure._paths import REDUBB_STATUS_FILE, REDUBB_QUEUE_FILE
-from videotrans.configure.contants import VITS_URL_MS, VITS_URL_HF
+from videotrans.configure.constants import VITS_URL_MS, VITS_URL_HF
 from videotrans.configure.excepts import DubbingSrtError
 from videotrans.configure.config import ROOT_DIR, app_cfg, logger,settings
 from videotrans.tts._base import BaseTTS
@@ -111,13 +111,12 @@ def _t(role, device='cpu'):
     return tts, sid
 
 
-@dataclass
+@dataclass(repr=False)
 class VitsCNEN(BaseTTS):
 
     def __post_init__(self):
         super().__post_init__()
         self.speed = self.get_speed()
-        self.device = "cpu"  # todo cuda
         self.local_dir=f'{ROOT_DIR}/models/vits'
 
     def _download(self):
@@ -153,11 +152,11 @@ class VitsCNEN(BaseTTS):
                     ok+=1
                     continue
                 try:
-                    _key = f'{item["role"]}-{self.device}'
+                    _key = f'{item["role"]}-cpu'
                     if _key in _model_obj:
                         _tts, sid = _model_obj.get(_key)
                     else:
-                        _tts, sid = _t(item['role'], self.device)
+                        _tts, sid = _t(item['role'], "cpu")
                         _model_obj[_key] = (_tts, sid)
 
                     audio = _tts.generate(item['text'], sid=sid, speed=self.speed)

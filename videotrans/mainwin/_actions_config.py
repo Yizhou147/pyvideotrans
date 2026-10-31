@@ -1,15 +1,17 @@
 from pathlib import Path
 
 from videotrans import translator, recognition, tts
-from videotrans.configure import contants
+from videotrans.configure import constants
 from videotrans.configure.config import tr, settings, app_cfg
+from videotrans.recognition import ALLOW_CHANGE_MODEL, get_model_by_type
 from videotrans.util.help_misc import show_error
 from videotrans.util.help_role import role_menu
 
 
 class WinActionConfigMixin:
 
-    def show_xxl_select(self):
+    @staticmethod
+    def show_xxl_select():
         import sys
         if sys.platform != 'win32':
             show_error(
@@ -17,8 +19,8 @@ class WinActionConfigMixin:
             return False
         xxl_path = settings.get('Faster_Whisper_XXL', '')
         if not xxl_path or not Path(xxl_path).exists():
-            from videotrans.component.set_xxl import SetFasterXXL
-            dialog = SetFasterXXL()
+            from videotrans.component.xxl import XXL
+            dialog = XXL()
             if dialog.exec():
                 xxl_path = dialog.get_values()
                 if xxl_path and Path(xxl_path).is_file():
@@ -33,10 +35,7 @@ class WinActionConfigMixin:
         if recogn_type == recognition.Faster_Whisper_XXL and not self.show_xxl_select():
             return
 
-        if recogn_type not in [recognition.FASTER_WHISPER, recognition.OPENAI_WHISPER, recognition.Faster_Whisper_XXL,
-                               recognition.FUNASR_CN, recognition.Deepgram, recognition.Whisper_CPP,
-                               recognition.WHISPERX_API, recognition.HUGGINGFACE_ASR, recognition.QWENASR,
-                               recognition.WHISPER_NET]:
+        if recogn_type not in ALLOW_CHANGE_MODEL:
 
             self.main.model_name.setDisabled(True)
             self.main.model_name_help.setDisabled(True)
@@ -44,23 +43,7 @@ class WinActionConfigMixin:
             self.main.model_name_help.setDisabled(False)
             self.main.model_name.setDisabled(False)
             self.main.model_name.clear()
-            if recogn_type in [recognition.FASTER_WHISPER, recognition.OPENAI_WHISPER, recognition.Faster_Whisper_XXL,
-                               recognition.WHISPERX_API]:
-                self.main.model_name.addItems(
-                    settings.WHISPER_MODEL_LIST if recogn_type != recognition.OPENAI_WHISPER else contants.Openai_Whisper_Models.split(','))
-            elif recogn_type == recognition.Deepgram:
-                self.main.model_name.addItems(contants.DEEPGRAM_MODEL)
-            elif recogn_type == recognition.Whisper_CPP:
-                self.main.model_name.addItems(settings.Whisper_CPP_MODEL_LIST)
-            elif recogn_type == recognition.WHISPER_NET:
-                self.main.model_name.addItems(settings.Whisper_NET_MODEL_LIST)
-
-            elif recogn_type == recognition.QWENASR:
-                self.main.model_name.addItems(['1.7B', '0.6B'])
-            elif recogn_type == recognition.HUGGINGFACE_ASR:
-                self.main.model_name.addItems(list(recognition.HUGGINGFACE_ASR_MODELS.keys()))
-            else:
-                self.main.model_name.addItems(contants.FUNASR_MODEL)
+            self.main.model_name.addItems(get_model_by_type(recogn_type))
 
         lang = translator.get_code(show_text=self.main.source_language.currentText())
 
@@ -88,22 +71,33 @@ class WinActionConfigMixin:
 
         app_cfg.line_roles = {}
         _role_list = role_menu(type, lang if lang and lang != '-' else None)
+        _origin_role=self.main.voice_role.currentText()
         self.main.voice_role.clear()
         self.main.current_rolelist = _role_list
-        self.main.voice_role.addItems(self.main.current_rolelist)
-        if tts.is_input_api(tts_type=type) is not True:
-            return
+        self.main.voice_role.addItems(_role_list)
+        if _origin_role and _origin_role in _role_list:
+            self.main.voice_role.setCurrentText(_origin_role)
+        _rs=tts.is_input_api(tts_type=type)
+        if isinstance(_rs,str):
+            return show_error(_rs)
+        if type==tts.AUDIOCPP_TTS:
+            self.main.show_tips.setText(tr('toggle audiocpp model'))
 
     def set_voice_role(self, t):
         role = self.main.voice_role.currentText()
         code = translator.get_code(show_text=t)
-        if code and code != '-':
+        if code and code not in ['-','No']:
+            _tips=""
             is_allow_lang = tts.is_allow_lang(langcode=code, tts_type=self.main.tts_type.currentIndex())
-            self.main.show_tips.setText(str(is_allow_lang) if is_allow_lang is not True else '')
-            
-            if translator.is_allow_translate(translate_type=self.main.translate_type.currentIndex(),
-                                             show_target=t) is not True:
-                return
+            if is_allow_lang is not True:
+                _tips+=f'{is_allow_lang} '
+
+            rs=translator.is_allow_translate(translate_type=self.main.translate_type.currentIndex(),
+                                             show_target=t)
+            if isinstance(rs,str):
+                _tips+=rs
+            self.main.show_tips.setText(_tips)
+
         if self.main.tts_type.currentIndex() not in tts.CHANGE_BY_LANGUAGE:
             if role != 'No' and self.main.app_mode in ['biaozhun']:
                 self.main.listen_btn.show()

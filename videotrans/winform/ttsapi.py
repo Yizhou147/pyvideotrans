@@ -1,30 +1,32 @@
 
 
 def openwin():
-    from videotrans.configure.contants import LISTEN_TEXT
+    from videotrans.winform import get_cls
+    from pathlib import Path
+    from videotrans.configure.constants import LISTEN_TEXT
     from PySide6 import QtWidgets
     from videotrans.configure.config import tr,app_cfg, params
     from videotrans.configure import config
     from videotrans.util.ListenVoice import ListenVoice
+    from videotrans.util.help_misc import show_error
     def feed(d):
         if d == "ok":
             QtWidgets.QMessageBox.information(winobj, "ok", "Test Ok")
+        else:
+            show_error(d)
         winobj.test.setText(tr("Test"))
 
     def test():
         url = winobj.api_url.text().strip()
         if not url.startswith('http'):
             url = 'http://' + url
-        extra = winobj.extra.text()
+        extra = winobj.extra.text().strip()
         role = winobj.voice_role.toPlainText().strip()
-        language_boost = winobj.language_boost.currentText()
 
-        params["ttsapi_language_boost"] = language_boost
-        emotion = winobj.emotion.currentText()
-        params["ttsapi_emotion"] = emotion
         params["ttsapi_url"] = url
         params["ttsapi_extra"] = extra
         params["ttsapi_voice_role"] = role
+        params.save()
         winobj.test.setText(tr("Testing..."))
         from videotrans import tts
         import time
@@ -42,23 +44,16 @@ def openwin():
         url = winobj.api_url.text().strip()
         if not url.startswith('http'):
             url = 'http://' + url
-        extra = winobj.extra.text()
+        extra = winobj.extra.text().strip()
         role = winobj.voice_role.toPlainText().strip().replace('\n', '')
-        language_boost = winobj.language_boost.currentText()
-        params["ttsapi_language_boost"] = language_boost
-
-        emotion = winobj.emotion.currentText()
-        params["ttsapi_emotion"] = emotion
-
         params["ttsapi_url"] = url
         params["ttsapi_extra"] = extra
         params["ttsapi_voice_role"] = role
         params.save()
         winobj.close()
 
-    from videotrans.component.set_form import TtsapiForm
-    winobj = TtsapiForm()
-    app_cfg.child_forms['ttsapi'] = winobj
+
+    winobj = get_cls(Path(__file__).stem)()
     if params["ttsapi_url"]:
         winobj.api_url.setText(str(params["ttsapi_url"]))
     if params["ttsapi_voice_role"]:
@@ -66,11 +61,8 @@ def openwin():
     if params["ttsapi_extra"]:
         winobj.extra.setText(str(params["ttsapi_extra"]))
 
-    if params["ttsapi_language_boost"]:
-        winobj.language_boost.setCurrentText(str(params["ttsapi_language_boost"]))
-    if params["ttsapi_emotion"]:
-        winobj.emotion.setCurrentText(str(params["ttsapi_emotion"]))
+
 
     winobj.save.clicked.connect(save)
     winobj.test.clicked.connect(test)
-    winobj.show()
+    return winobj

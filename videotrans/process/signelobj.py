@@ -8,9 +8,12 @@ def pool_init_worker():
     class NullWriter:
         def write(self, *args, **kwargs): pass
         def flush(self, *args, **kwargs): pass
-        def isatty(self): return False
-        def fileno(self): return -1
-        def read(self, *args, **kwargs): return ""
+        @staticmethod
+        def isatty(): return False
+        @staticmethod
+        def fileno(): return -1
+        @staticmethod
+        def read(*args, **kwargs): return ""
         def close(self): pass
         @property
         def encoding(self): return "utf-8"
@@ -89,46 +92,24 @@ class GlobalProcessManager:
     _executor_cpu = None
     _executor_gpu = None
 
-    @classmethod
-    def get_cpu_process_nums(cls):
-        cpu_count = int(os.cpu_count())
-        try:
-            man_set = int(float(settings.get('process_max', 0)))
-        except (ValueError, TypeError):
-            man_set = 0
-        if man_set > 0:
-            # 最小1个
-            return int(max(min(man_set, 8, cpu_count), 1))
 
-        import psutil
-        mem = psutil.virtual_memory()
-        # 最多8个进程,最小1个
-        return int(max(min((int(mem.available / (1024 ** 3)) // 4), 8, cpu_count), 1))
 
     @classmethod
     def get_gpu_process_nums(cls):
-        cpu_count = int(os.cpu_count())
+        cpu_count = max(int(os.cpu_count()),1)
         try:
-            process_max_gpu = int(float(settings.get('process_max_gpu', 0)))
+            process_max_gpu = max( int(float(settings.get('process_max_gpu', 0))) ,1)
         except (TypeError, ValueError):
-            process_max_gpu = 0
+            process_max_gpu = 1
 
-        # 手动设置了gpu进程数量，则优先级最高,例如虽然只有一卡，但显存特别大，可手动设置多个gpu进程
-        if process_max_gpu > 0:
-            # 最小1个
-            return int(max(min(process_max_gpu, 8, cpu_count), 1))
+        return int(min(process_max_gpu, 8, cpu_count))
 
-        # 没有显卡 或 没有启用多显卡，则只启动一个gpu进程
-        if app_cfg.NVIDIA_GPU_NUMS < 1 or not bool(settings.get('multi_gpus', False)):
-            return 1
-        # 最小1个
-        return int(max(min(app_cfg.NVIDIA_GPU_NUMS, 8, cpu_count), 1))
 
     @classmethod
     def get_executor_cpu(cls):
         if cls._executor_cpu is None:
             ctx = multiprocessing.get_context('spawn')
-            max_workers = cls.get_cpu_process_nums()
+            max_workers = app_cfg.MAX_CPU_PROCESS
             logger.debug(f'CPU进程池:{max_workers=}')
             cls._executor_cpu = ctx.Pool(
                 processes=int(max_workers),
@@ -144,7 +125,7 @@ class GlobalProcessManager:
         """
         if cls._executor_gpu is None:
             ctx = multiprocessing.get_context('spawn')
-            max_workers = cls.get_gpu_process_nums()
+            max_workers = app_cfg.MAX_GPU_PROCESS
             logger.debug(f'GPU进程池:{max_workers=}')
             cls._executor_gpu = ctx.Pool(
                 processes=int(max_workers),
@@ -157,6 +138,7 @@ class GlobalProcessManager:
     @classmethod
     def submit_task_cpu(cls, func, **kwargs):
         _executor = cls.get_executor_cpu()
+        print(f'{kwargs=}')
         # 使用 error_callback 记录错误日志
         async_result = _executor.apply_async(
             _task_worker_wrapper,

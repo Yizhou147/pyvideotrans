@@ -4,8 +4,8 @@ import ctranslate2
 import sentencepiece as spm
 from dataclasses import dataclass
 from typing import List, Union
-from videotrans.configure.config import ROOT_DIR,logger
-from videotrans.configure.contants import M2M100_URL_MS, M2M100_URL_HF
+from videotrans.configure.config import ROOT_DIR, logger, settings
+from videotrans.configure.constants import M2M100_URL_MS, M2M100_URL_HF
 from videotrans.translator._base import BaseTrans
 import torch
 
@@ -15,68 +15,24 @@ import torch
 from videotrans.util.help_down import down_zip
 from videotrans.util.help_misc import is_connect_hf
 
-_LANGUAGE_CODE_MAP = {
-        "en": "__en__",
-        "zh": "__zh__",
-        "fr": "__fr__",
-        "de": "__de__",
-        "ja": "__ja__",
-        "ko": "__ko__",
-        "ru": "__ru__",
-        "es": "__es__",
-        "th": "__th__",
-        "it": "__it__",
-        "el": "__el__",
-        "pt": "__pt__",
-        "vi": "__vi__",
-        "ar": "__ar__",
-        "tr": "__tr__",
-        "hi": "__hi__",
-        "hu": "__hu__",
-        "uk": "__uk__",
-        "id": "__id__",
-        "ms": "__ms__",
-        "kk": "__kk__",
-        "cs": "__cs__",
-        "pl": "__pl__",
-        "nl": "__nl__",
-        "sv": "__sv__",
-        "he": "__he__",
-        "bn": "__bn__",
-        "fa": "__fa__",
-        "fi": "__tl__",# 菲律宾语
-        "ur": "__ur__",
-        "yue": "__zh__",
-        "yu": "__zh__",
-        "uz": "__uz__",
-        "ro": "__ro__",
-        "nb": "__no__"
-}
-
 # Refer to https://github.com/ymoslem/DesktopTranslator/blob/main/utils/m2m_languages.json
 # other languages can be added as well
 
-@dataclass
+@dataclass(repr=False)
 class M2M100Trans(BaseTrans):
-
-    def __post_init__(self):
-        super().__post_init__()
-        if not self.source_code or self.source_code=='auto':
-            self.from_lang='auto'
-        else:
-            self.from_lang=_LANGUAGE_CODE_MAP.get(self.source_code.split('-')[0].lower(),'auto')
-        self.to_lang=_LANGUAGE_CODE_MAP.get(self.target_code.split('-')[0].lower())
 
     def _download(self):
         if not Path(f'{ROOT_DIR}/models/m2m100_12b/model.bin').exists():
             down_zip(f"{ROOT_DIR}/models", M2M100_URL_MS if not is_connect_hf() else M2M100_URL_HF,self._process_callback)
+        device=settings.get('device_name','auto')
+        if device=='auto':
+            device="cpu" if not self.is_cuda or not torch.cuda.is_available() else "cuda"
         self.model = ctranslate2.Translator(
             model_path=f'{ROOT_DIR}/models/m2m100_12b',
-            device="cpu" if not torch.cuda.is_available() else "cuda",
-            device_index=0,
+            device=device
         )
         self.model.load_model()
-        self.sentence_piece_processor = spm.SentencePieceProcessor(model_file=f'{ROOT_DIR}/models/m2m100_12b/sentencepiece.model')
+        self.sentence_piece_processor = spm.SentencePieceProcessor(f'{ROOT_DIR}/models/m2m100_12b/sentencepiece.model')
         return True
 
     def _unload(self):
@@ -87,13 +43,13 @@ class M2M100Trans(BaseTrans):
         except Exception as e:
             logger.warning(f'm2m100 unload error: {e}')
 
-    def _item_task(self, data: Union[List[str], str]):
-        queries = data if isinstance(data, list) else [data]
+    def _item_task(self, data: str)->str:
+        queries = data.split("\n")
     
-        queries_tokenized = self.tokenize(queries, self.from_lang)
+        queries_tokenized = self.tokenize(queries, self.source_code)
         translated_tokenized = self.model.translate_batch(
             source=queries_tokenized,
-            target_prefix=[[self.to_lang]] * len(queries),
+            target_prefix=[[self.target_code]] * len(queries),
             beam_size=5,
             max_batch_size=2048,
             return_alternatives=False,
@@ -101,7 +57,7 @@ class M2M100Trans(BaseTrans):
             replace_unknowns=True,
             repetition_penalty=3,
         )
-        translated = self.detokenize(list(map(lambda t: t[0]['tokens'], translated_tokenized)), self.to_lang)
+        translated = self.detokenize(list(map(lambda t: t[0]['tokens'], translated_tokenized)), self.target_code)
         return "\n".join([it.strip() for it in translated])
 
     def tokenize(self, queries, lang=None):

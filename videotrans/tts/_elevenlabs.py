@@ -12,7 +12,7 @@ from videotrans.tts._base import BaseTTS
 from videotrans.util.help_misc import vail_file
 
 
-@dataclass
+@dataclass(repr=False)
 class ElevenLabsC(BaseTTS):
     def __post_init__(self):
         super().__post_init__()
@@ -31,7 +31,7 @@ class ElevenLabsC(BaseTTS):
             response = client.text_to_speech.convert(
                 text=data_item['text'],
                 voice_id=jsondata[role]['voice_id'],
-                model_id=params.get("elevenlabstts_models"),
+                model_id=params.get("elevenlabstts_model"),
 
                 output_format="mp3_44100_128",
 

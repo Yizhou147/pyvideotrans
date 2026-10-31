@@ -1,0 +1,336 @@
+from ._languages_dict import LISTEN_TEXT, LANGUAGE_M2M100, LANGUAGE_FIRERED3, LANG_CODE, SUBTITLE_CODE, SUBTITLE_CODE_B
+
+
+# 支持的视频格式
+VIDEO_EXTS = ["mp4", "mkv", "mpeg", "avi", "mov", "mts", "webm", "ogg", "ts", "flv", "wmv"]
+# 支持的音频格式
+AUDIO_EXITS = ["mp3", "wav", "aac", "flac", "m4a", "ogg", "wma"]
+
+
+# -----------语音识别模型-----------------
+FASTER_MODELS_DICT = {
+    "tiny.en": "Systran/faster-whisper-tiny.en",
+    "tiny": "Systran/faster-whisper-tiny",
+    "base.en": "Systran/faster-whisper-base.en",
+    "base": "Systran/faster-whisper-base",
+    "small.en": "Systran/faster-whisper-small.en",
+    "small": "Systran/faster-whisper-small",
+    "medium.en": "Systran/faster-whisper-medium.en",
+    "medium": "Systran/faster-whisper-medium",
+    "large-v1": "Systran/faster-whisper-large-v1",
+    "large-v2": "Systran/faster-whisper-large-v2",
+    "large-v3": "Systran/faster-whisper-large-v3",
+    "large": "Systran/faster-whisper-large-v3",
+    "distil-large-v2": "Systran/faster-distil-whisper-large-v2",
+    "distil-medium.en": "Systran/faster-distil-whisper-medium.en",
+    "distil-small.en": "Systran/faster-distil-whisper-small.en",
+    "distil-large-v3": "Systran/faster-distil-whisper-large-v3",
+    "distil-large-v3.5": "distil-whisper/distil-large-v3.5-ct2",
+    "large-v3-turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+    "turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+}
+FUN_ASR_MODELS = 'Fun-ASR-Nano-2512,Fun-ASR-MLT-Nano-2512,paraformer-zh,SenseVoiceSmall'
+QWEN_ASR_LOCAL_MODELS = '1.7B,0.6B'
+ELEVENLABS_ASR_MODELS='scribe_v2'
+DEEPGRAM_ASR_MODELS =  "nova-3,nova-2,whisper-large"
+GEMINI_ASR_MODELS = "gemini-3.5-transcribe"
+WHISPER_CPP_MODELS = "ggml-tiny.bin,ggml-base.bin,ggml-small.bin,ggml-medium.bin,ggml-large-v1.bin,ggml-large-v2.bin,ggml-large-v3.bin,ggml-large-v3-turbo.bin"
+WHISPER_NET_MODELS = WHISPER_CPP_MODELS
+QWEN_ASR_MODELS = 'qwen3-asr-flash,qwen-audio-3.0-asr-flash,fun-asr-flash-2026-06-15'
+OPENAIRECOGNAPI_MODELS = "whisper-1,gpt-4o-transcribe,gpt-4o-mini-transcribe,gpt-4o-transcribe-diarize"
+OPENROUTER_ASR_MODELS = "microsoft/mai-transcribe-2,microsoft/mai-transcribe-1.5,nvidia/nemotron-3.5-asr-streaming-multilingual-0.6b,nvidia/parakeet-tdt-0.6b-v3,mistralai/voxtral-small-24b-2507-stt,mistralai/voxtral-mini-3b-2507,mistralai/voxtral-mini-transcribe,qwen/qwen3-asr-1.7b,qwen/qwen3-asr-0.6b,qwen/qwen3-asr-flash-2026-02-10,openai/gpt-4o-mini-transcribe,openai/gpt-transcribe,openai/whisper-large-v3-turbo,openai/whisper-large-v3,openai/gpt-4o-transcribe,openai/whisper-1,fish-audio/transcribe-1,x-ai/grok-stt-1.0,deepgram/nova-3,meta/muse-voice-transcribe-1.0,"
+CAMBAI_ASR_MODELS='mars-flash,mars-pro,mars-instruct'
+SILICONFLOW_ASR_MODELS = "XingChenAGI/XingChenGSR-V1.0,XingChenAGI/XingChenASR-V3.2-Ultra,Qwen/Qwen3-ASR-1.7B,XingChenAGI/XingChenASR-V3.2,FunAudioLLM/SenseVoiceSmall"
+WHISPER_MODELS = "tiny,tiny.en,base,base.en,small,small.en,medium,medium.en,large-v3-turbo,large-v1,large-v2,large-v3,distil-large-v3,distil-large-v3.5"
+OPENAI_WHISPER_MODELS = "tiny,tiny.en,base,base.en,small,small.en,medium,medium.en,large-v3-turbo,large-v1,large-v2,large-v3"
+MINIMAX_ASR_MODELS = "asr-1.0"
+XIAOMO_ASR_MODELS="mimo-v2.5-asr"
+ZHIPUAI_ASR_MODELS="glm-asr-2512"
+
+AUDIOCPP_ASR_MODELS={
+    "fun_asr_nano":{
+        "url":"https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512-GGUF/resolve/main/fun-asr-nano-2512-q8_0.gguf?download=true", #下载地址
+        "file":"Fun-ASR-Nano-2512-GGUF/fun-asr-nano-2512-q8_0.gguf", # 本地模型位置
+        "languages":["zh","en","ja","yue"],
+        "allow_language_tag":True, # 有些模型不支持使用 language标签
+        "extra":["--request-option","audio_chunk_mode=none"] # 某些模型需要禁用vad
+    },
+    "qwen3_asr":{
+        "url":"https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/main/Qwen3-ASR-1.7B-GGUF/qwen3-asr-1.7b-q8_0.gguf?download=true",
+        "languages":["zh", "en", "yue", "ar", "de", "fr", "es", "pt", "id", "it", "ko", "ru", "th", "vi", "ja", "tr", "hi", "ms", "nl", "sv", "da", "fi", "pl", "cs", "fil", "fa", "el", "hu", "mk", "ro"],
+        "allow_language_tag":True,
+        "file":"Qwen3-ASR-1.7B-GGUF/qwen3-asr-1.7b-q8_0.gguf",
+        "extra":["--request-option","audio_chunk_mode=none"]
+    },
+    "sense_asr":{
+        "url":"https://huggingface.co/FunAudioLLM/SenseVoiceSmall-GGUF-audiocpp/resolve/main/sensevoice-small-q8-audiocpp-v1.gguf?download=true",
+        "file":"SenseVoice-Small-GGUF/sensevoice-small-q8-audiocpp-v1.gguf",
+        "languages":["zh", "en", "yue", "ja", "ko", "pt", "ru", "es", "it", "fr", "de", "nl", "pl", "tr", "ar", "hi", "vi", "th", "id", "ms", "fa"],
+        "allow_language_tag":True,
+        "extra":["--request-option","audio_chunk_mode=none"]
+    },
+    "vibevoice_asr":{
+      "url":"https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/main/VibeVoice-ASR-GGUF/vibevoice-asr-q8_0.gguf?download=true",
+        "file":"VibeVoice-ASR-GGUF/vibevoice-asr-q8_0.gguf",
+        "allow_language_tag":True,
+        "extra":["--request-option","audio_chunk_mode=none"]
+    },
+    "moss_transcribe_diarize":{
+        "url":"https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/main/MOSS-Transcribe-Diarize-GGUF/moss-transcribe-diarize-q8_0.gguf?download=true",
+        "allow_language_tag":False,
+        "file":"MOSS-Transcribe-Diarize-GGUF/moss-transcribe-diarize-q8_0.gguf"
+    },
+    "parakeet_tdt":{
+        "url":"https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/main/Parakeet-TDT-0.6B-v3-GGUF/parakeet-tdt-0.6b-v3-q8_0.gguf?download=true",
+        "languages":["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"],
+        "allow_language_tag":False,
+        "file":"Parakeet-TDT-0.6B-v3-GGUF/parakeet-tdt-0.6b-v3-q8_0.gguf",
+        "extra":["--request-option","audio_chunk_mode=none"]
+    },
+    "nemotron_asr":{
+        "url":"https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/main/Nemotron-3.5-ASR-Streaming-0.6B-GGUF/nemotron-3.5-asr-streaming-0.6b-q8_0.gguf?download=true",
+        "allow_language_tag":True,
+        "file":"Nemotron-3.5-ASR-Streaming-0.6B-GGUF/nemotron-3.5-asr-streaming-0.6b-q8_0.gguf"
+    }
+}
+
+
+#---------文本模型 字幕翻译模型 =====================================
+GEMINI_MODELS = "gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-pro-latest,gemini-flash-latest,gemini-2.5-pro,gemini-2.5-flash"
+BAILIAN_MODELS = "qwen-mt-turbo,qwen-mt-plus,qwen-mt-flash,qwen-mt-lite,qwen3.8-flash,qwen3.8-max,qwen3.7-plus,qwen3.7-flash,qwen3.7-max,qwen3.6-flash,qwen3.5-flash"
+CHATGPT_MODELS = "gpt-5.6-sol,gpt-5.6-luna,gpt-5.5,gpt-5.5-pro,gpt-5.4-pro,gpt-5.4,gpt-5.4-mini,gpt-5,gpt-5-mini"
+AZURE_MODELS = "gpt-5.5,gpt-5.4-mini, gpt-5.4-nano, gpt-5.4, gpt-5.4-pro,gpt-5.1, gpt-5.1-chat"
+LOCALLLM_MODELS = "qwen3.6,deepseek-v4-flash"
+ZHIPUAI_MODELS = "glm-5.3,glm-5.2,glm-5.1,glm-5, glm-4.7, glm-4.7-flash, glm-4.6,glm-4.5-flash"
+DEEPSEEK_MODELS = "deepseek-flash,deepseek-v4-pro,deepseek-v4-flash"
+OPENROUTER_MODELS = "~deepseek/deepseek-flash-latest,~deepseek/deepseek-pro-latest,~openai/gpt-astra-latest,~openai/gpt-sol-latest,~openai/gpt-terra-latest,~openai/gpt-luna-latest,openai/gpt-6-astra,openai/gpt-6-astra-pro,qwen/qwen3.8-max-0902,google/gemini-3.8-flash,anthropic/claude-fable-5.1,tencent/hy4-preview,~z-ai/glm-flash-latest,qwen/qwen3.8-flash,z-ai/glm-5.3-flash,~z-ai/glm-latest,z-ai/glm-5.3,qwen/qwen3.8-27b,google/gemini-3.7-flash"
+LITELLM_MODELS = "gpt-4o-mini,gpt-4o,claude-sonnet-4-6,claude-haiku-4-5,deepseek-chat"
+APIROUTE_MODELS = "gpt-5.4-mini,gpt-5.4,claude-sonnet-4-6,deepseek-chat,glm-5"
+OPPER_MODELS = "gpt-5.4-mini,claude-sonnet-4-6,gemini-3.8-flash,deepseek-v4-pro,kimi-k3,mistral-large-2512"
+RUNCRATE_MODELS = "deepseek-ai/DeepSeek-V4.1-Flash,zai-org/GLM-5.3-Flash,zai-org/GLM-5.3,Qwen/Qwen3.8-Flash,openai/gpt-oss-120b,moonshotai/Kimi-K2.6"
+CLOUDGPU_MODELS = "deepseek-v4.1-flash,deepseek-v4-pro,kimi-k3,kimi-k2.6,glm-5.3-flash,glm-5.2,minimax-m3"
+ATLASCLOUD_MODELS = "deepseek-ai/deepseek-v4-flash,zai-org/glm-5.3-flash,moonshotai/kimi-k2.6,qwen/qwen3.5-flash,minimaxai/minimax-m2.5"
+CheaperInference_MODELS = "gpt-5.4-mini,gpt-5.4,claude-sonnet-5,gemini-3.1-pro,deepseek-v4-flash"
+SILICONFLOW_MODELS = "tencent/Hy4-preview,zai-org/GLM-5.3,deepseek-ai/DeepSeek-V4-Flash,meituan-longcat/LongCat-2.0,zai-org/GLM-5.2,deepseek-ai/DeepSeek-V4-Pro,Qwen/Qwen3.8-27B"
+AI302_MODELS = "deepseek-v4-pro,deepseek-v4-flash"
+ZIJIEHUOSHAN_MODELS = "doubao-seed-evolving,doubao-seed-2-1-pro-260915,doubao-seed-2-1-turbo-260628,doubao-seed-character-260628,doubao-seed-2-0-pro-260215,doubao-seed-2-0-mini-260428"
+MINIMAX_MODELS = "MiniMax-M3.1-Flash,MiniMax-M3,MiniMax-M2.7,MiniMax-M2.7-highspeed"
+XIAOMI_MODELS = 'mimo-v2.6-flash,mimo-v2.6-pro,mimo-v2.5-pro,mimo-v2.5'
+INFISTAR_MODELS = "gpt-5.4-mini,deepseek-v4-flash,gpt-5.4,claude-sonnet-5,gemini-3.8-flash,qwen3.7-plus"
+
+#---------TTS 语音合成模型=====================================================
+GEMINI_TTS_MODELS = "gemini-3.1-flash-tts-preview,gemini-3.8-flash-tts,gemini-2.5-flash-preview-tts,gemini-2.5-pro-preview-tts"
+BAILIAN_TTS_MODELS = 'qwen3-tts-flash,qwen3-tts-instruct-flash,qwen-tts-latest,qwen-tts'
+OPENAI_TTS_MODELS = "tts-1,tts-1-hd,gpt-4o-mini-tts"
+OPENROUTER_TTS_MODELS = "qwen/qwen-audio-3.0-tts-flash,qwen/qwen-audio-3.0-tts-plus,microsoft/mai-voice-2-flash,x-ai/grok-voice-tts-1.0,google/gemini-3.1-flash-tts-preview,deepgram/flux-tts:free,canopylabs/orpheus-3b-0.1-ft,hexgrad/kokoro-82m,mistralai/voxtral-mini-tts-2603"
+SILICONFLOW_TTS_MODELS = "fnlp/MOSS-TTSD-v0.5,FunAudioLLM/CosyVoice2-0.5B"
+MINIMAX_TTS_MODELS = "speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo"
+ELEVENLABS_TTS_MODELS = "eleven_v4,eleven_v3,eleven_multilingual_v2"
+XIAOMI_TTS_MODELS = 'mimo-v2.5-tts'
+FISHAUDIO_TTS_MODELS='s2.1-pro,s2-pro,s2.1-pro-free,drama-3'
+
+
+# ------------默认TTS配音角色=================================
+SILICONFLOW_ROLES = "alex,benjamin,charles,david,anna,bella,claire,diana"
+CHATTTS_ROLES = "11,12,16,2222,4444,6653,7869,9999,5,13,14,1111,3333,4099,5099,5555,8888,6666,7777"
+OPENAITTS_ROLES = "alloy,ash,ballad,coral,echo,fable,onyx,nova,sage,shimmer,verse"
+XAITTS_ROLES = 'eve,ara,rex,sal,leo'
+MITTS_ROLES = 'mimo_default,default_zh,冰糖,茉莉,苏打,白桦,Mia,Milo,Dean,Chloe,default_en'
+GEMINITTS_ROLES = "Zephyr,Puck,Charon,Kore,Fenrir,Leda,Orus,Aoede,Callirrhoe,Autonoe,Enceladus,Iapetus,Umbriel,Algieba,Despina,Erinome,Algenib,Rasalgethi,Laomedeia,Achernar,Alnilam,Schedar,Gacrux,Pulcherrima,Achird,Zubenelgenubi,Vindemiatrix,Sadachbia,Sadaltager,Sulafat"
+
+
+#---------------- 中日韩 泰国语 高棉语 粤语 不使用空格
+CJK_LANG = ["zh", "ja", "ko", "th", "km", "yue", "lo", "lao"]
+# 常见标点
+PUNC_FLAGS = [",", ".", "?", "!", ";", "，", "。", "？", "；", "！"]
+# 逗号等软性标点
+PUNC_FLAGS_HALF = [",", "，", "-", "、", ":", "："]
+# 句子终止标点
+PUNC_FLAGS_END = [".", "。", "?", "？", "!", "！"]
+NON_WORD = r"""^[,.?!;'"_，。？；‘’“”！~@#￥%…&*（【】）｛｝《、》$()\[\]{}=+<>\s-]+$"""
+
+# ------------跳过使用代理的域名---------------
+# 不使用代理的域名
+no_proxy = ",".join( [
+    # --- 腾讯云 ---
+    "tencentcloudapi.com", ".tencentcloudapi.com",
+
+    # --- HuggingFace ---
+    "hf-mirror.com", ".hf-mirror.com",
+
+    # --- 百度 (包含 fanyi.baidu 等所有子域) ---
+    "baidu.com", ".baidu.com",
+
+    # --- 字节跳动 (包含 openspeech 等所有子域) ---
+    "bytedance.com", ".bytedance.com", ".volces.com", "volces.com",
+
+    # --- MiniMax ---
+    "api.minimaxi.com", ".minimaxi.com",
+
+    # --- DeepSeek ---
+    "api.deepseek.com", ".deepseek.com",
+
+    # --- ModelScope ---
+    "modelscope.cn", ".modelscope.cn",
+
+    # --- 阿里云 (包含 dashscope, aliyuncs 等) ---
+    "aliyuncs.com", ".aliyuncs.com",
+
+    # --- SiliconFlow ---
+    "siliconflow.cn", ".siliconflow.cn",
+
+    "ms.show", ".ms.show",
+    "bigmodel.cn", ".bigmodel.cn",
+
+    "api.gradio.app", ".api.gradio.app",
+
+    # --- 本地回环 (涵盖所有端口：7860, 8000, 9880, 5051等) ---
+    "localhost",
+    "127.0.0.1",
+    "127.0.0.2",
+    "0.0.0.0",
+])
+
+#-------------模型下载地址===========================================
+# whisper.cpp windows二进制文件
+WHISPER_CPP_URL_MS = 'https://modelscope.cn/models/himyworld/videotrans/resolve/master/whisper-cpp-win32.zip'
+WHISPER_CPP_URL_HF = 'https://huggingface.co/mortimerme/repocollect/resolve/main/whisper-cpp-win32.zip?download=true'
+
+# 内置说话人下载地址
+BUILTINT_URL_MS = [
+    "https://www.modelscope.cn/models/himyworld/videotrans/resolve/master/onnx/seg_model.onnx",
+    "https://www.modelscope.cn/models/himyworld/videotrans/resolve/master/onnx/nemo_en_titanet_small.onnx",
+    "https://www.modelscope.cn/models/himyworld/videotrans/resolve/master/onnx/3dspeaker_speech_eres2net_large_sv_zh-cn_3dspeaker_16k.onnx"
+]
+BUILTINT_URL_HF = [
+    "https://huggingface.co/mortimerme/repocollect/resolve/main/onnx/seg_model.onnx?download=true",
+    "https://huggingface.co/mortimerme/repocollect/resolve/main/onnx/nemo_en_titanet_small.onnx?download=true",
+    "https://huggingface.co/mortimerme/repocollect/resolve/main/onnx/3dspeaker_speech_eres2net_large_sv_zh-cn_3dspeaker_16k.onnx?download=true"
+]
+
+# 内置标点恢复模型下载地址
+PUNC_RESTORE_MS = [
+    "https://www.modelscope.cn/models/himyworld/videotrans/resolve/master/puntc/model.onnx",
+    "https://www.modelscope.cn/models/himyworld/videotrans/resolve/master/puntc/config.yaml",
+    "https://www.modelscope.cn/models/himyworld/videotrans/resolve/master/puntc/tokens.json",
+]
+PUNC_RESTORE_HF = [
+    "https://huggingface.co/mortimerme/repocollect/resolve/main/puntc/model.onnx?download=true",
+    "https://huggingface.co/mortimerme/repocollect/resolve/main/puntc/config.yaml?download=true",
+    "https://huggingface.co/mortimerme/repocollect/resolve/main/puntc/tokens.json?download=true",
+]
+# 降噪模型下载地址
+DENOISE_URL_HF = 'https://huggingface.co/mortimerme/repocollect/resolve/main/onnx/{}?download=true'
+
+# 背景音频分离地址前缀
+UVR_URL_HF = 'https://huggingface.co/mortimerme/repocollect/resolve/main/onnx/{}?download=true'
+# M2M100模型下载地址
+M2M100_URL_MS = 'https://modelscope.cn/models/himyworld/videotrans/resolve/master/m2m100_12b_model.zip'
+M2M100_URL_HF = 'https://huggingface.co/mortimerme/repocollect/resolve/main/m2m100_12b_model.zip?download=true'
+# ZipVoice-TTS 下载地址
+ZIPVOICE_URL_MS = 'https://modelscope.cn/models/himyworld/videotrans/resolve/master/zipvoice-tts.zip'
+ZIPVOICE_URL_HF = 'https://huggingface.co/mortimerme/repocollect/resolve/main/zipvoice-tts.zip?download=true'
+# VITS-TTS 下载地址
+VITS_URL_MS = 'https://modelscope.cn/models/himyworld/videotrans/resolve/master/vits-tts.zip'
+VITS_URL_HF = 'https://huggingface.co/mortimerme/repocollect/resolve/main/vits-tts.zip?download=true'
+# GPTW 用于 piper-TTS  下载地址
+GPTW_URL_MS = 'https://modelscope.cn/models/himyworld/videotrans/resolve/master/G2PWModel-v2-onnx.zip'
+GPTW_URL_HF = 'https://huggingface.co/mortimerme/repocollect/resolve/main/G2PWModel-v2-onnx.zip?download=true'
+# 小红书语音识别 fireredasr 下载地址
+FIRERED_URL_MS = 'https://modelscope.cn/models/himyworld/videotrans/resolve/master/fireredasr2aed.zip'
+FIRERED_URL_HF = 'https://huggingface.co/mortimerme/repocollect/resolve/main/fireredasr2aed.zip?download=true'
+# dolphine 语音识别模型下载地址
+DOLPHIN_URL_MS = 'https://modelscope.cn/models/himyworld/videotrans/resolve/master/dolphin.zip'
+DOLPHIN_URL_HF = 'https://huggingface.co/mortimerme/repocollect/resolve/main/dolphin.zip?download=true'
+# parakeet-ja日语识别模型下载地址
+PARAKEETJA_URL_MS = 'https://modelscope.cn/models/himyworld/videotrans/resolve/master/parakeet-ja.zip'
+PARAKEETJA_URL_HF = 'https://huggingface.co/mortimerme/repocollect/resolve/main/parakeet-ja.zip?download=true'
+# omnilingual 语音识别模型下载地址
+OMNILINGUAL_URL_MS = 'https://modelscope.cn/models/himyworld/videotrans/resolve/master/omnilingual.zip'
+OMNILINGUAL_URL_HF = 'https://huggingface.co/mortimerme/repocollect/resolve/main/omnilingual.zip?download=true'
+
+# realtime stt
+REALTIME_URL_MS = 'https://modelscope.cn/models/himyworld/videotrans/resolve/master/realtimestt.zip'
+REALTIME_URL_HF = 'https://huggingface.co/mortimerme/repocollect/resolve/main/realtimestt.zip?download=true'
+
+# whisper.cpp 模型下载地址
+WHISPERCPP_MODEL_URL_HF = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{}?download=true'
+WHISPERCPP_MODEL_URL_MS = 'https://modelscope.cn/models/viggocx/whisper.cpp/resolve/master/{}'
+
+# spacy_ontonotes.zip
+SPACY_URL_MS = 'https://modelscope.cn/models/himyworld/videotrans/resolve/master/spacy_ontonotes.zip'
+SPACY_URL_HF = 'https://github.com/explosion/spacy-pkuseg/releases/download/v0.0.26/spacy_ontonotes.zip'
+
+# audio.cpp
+AUDIO_CPP_MAC_MS="https://modelscope.cn/models/himyworld/videotrans/resolve/master/audio-v0.9.1-bin-macos-arm64-metal.zip"
+AUDIO_CPP_WIN_MS="https://modelscope.cn/models/himyworld/videotrans/resolve/master/audio-v0.9.1-bin-windows-x64-cuda12.4.zip"
+AUDIO_CPP_MAC_HF="https://huggingface.co/mortimerme/repocollect/resolve/main/audio-v0.9.1-bin-macos-arm64-metal.zip?download=true"
+AUDIO_CPP_WIN_HF="https://huggingface.co/mortimerme/repocollect/resolve/main/audio-v0.9.1-bin-windows-x64-cuda12.4.zip?download=true"
+AUDIO_CPP_MELBAND="https://huggingface.co/audio-cpp/audio.cpp-gguf/resolve/main/Mel-Band-RoFormer-GGUF/mel-band-roformer-q8_0.gguf?download=true"
+ZIPENHANCER_HF="https://huggingface.co/mortimerme/repocollect/resolve/main/zipenhancer.safetensors?download=true"
+
+# ----------Rubberband 库安装提示------------------
+INSTALL_RUBBERBAND_TIPS = """Windows: For Windows systems, please download the file, extract it, and place it in the ffmpeg folder in the current directory. Use a better audio acceleration algorithm\nhttps://breakfastquay.com/files/releases/rubberband-4.0.0-gpl-executable-windows.zip
+Darwin: `brew install rubberband`  and  `uv add pyrubberband` Use a better audio acceleration algorithm
+Linux: `sudo apt install rubberband-cli libsndfile1-dev` and `uv add pyrubberband`  Use a better audio acceleration algorithm"""
+
+CONTEXT_INFO_PROMPT = """
+# GLOBAL CONTEXT REFERENCE (STRICTLY READ-ONLY)
+
+Below inside `<GLOBAL_REFERENCE_CONTEXT>` is the **complete, full-length original transcript** of the entire video.
+
+### CRITICAL RULES FOR USING THIS REFERENCE:
+1. **READ-ONLY BACKGROUND CONTEXT ONLY**:
+   - This full script is provided EXCLUSIVELY to help you understand the broader story, resolve ambiguous pronouns (e.g., who "he/she/it" refers to), infer speaker tone, and see complete sentences that may have been cut off at chunk boundaries.
+2. **DO NOT TRANSLATE OR REPRODUCE THIS REFERENCE**:
+   - **STRICT PROHIBITION**: Do NOT translate, quote, summarize, or reproduce any part of `<GLOBAL_REFERENCE_CONTEXT>`.
+   - Outputting any block from outside the `<INPUT>` section is a critical system failure.
+3. **YOUR EXCLUSIVE TRANSLATION TARGET IS `<INPUT>`**:
+   - You must ONLY translate and output the subset of subtitle blocks provided inside `<INPUT>`.
+   - Your final output count, index numbers, and timestamps must match `<INPUT>` and `<INPUT>` ALONE.
+
+
+"""
+
+# ass 硬字幕样式
+DEFAULT_STYLE = {
+    'Name': 'Default',
+    'Fontname': 'Arial',
+    'Bottom_Fontname': 'Arial',
+    'Fontsize': 16,
+    'Bottom_Fontsize': 16,
+    'PrimaryColour': '&H00FFFFFF&',
+    'Bottom_PrimaryColour': '&H00FFFFFF&',
+    'SecondaryColour': '&H00FFFFFF&',
+    'OutlineColour': '&H00000000&',
+    'BackColour': '&H00000000&',
+    'Bold': 0,
+    'Italic': 0,
+    'Bottom_SecondaryColour': '&H00FFFFFF&',
+    'Bottom_OutlineColour': '&H00000000&',
+    'Bottom_BackColour': '&H00000000&',
+    'Bottom_Bold': 0,
+    'Bottom_Italic': 0,
+    'Underline': 0,
+    'StrikeOut': 0,
+    'ScaleX': 100,
+    'ScaleY': 100,
+    'Spacing': 0,
+    'Angle': 0,
+    'BorderStyle': 1,
+    'Outline': 0.5,
+    'Shadow': 0.5,
+    'Alignment': 2,
+    'MarginL': 10,
+    'MarginR': 10,
+    'MarginV': 10,
+    'Encoding': 1
+}
+
+# --------进度状态提示文字-----------------------
+END_STATUS = "end"
+ERROR_STATUS = "error"
+SUCCEED_STATUS = "succeed"
+STOP_STATUS = "stop"
+ING_STATUS = "ing"
+

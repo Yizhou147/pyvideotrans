@@ -1,6 +1,6 @@
 # pyVideoTrans 技术架构与实现原理
 
-`pyvideotrans` 是一款功能强大的开源视频翻译配音工具（v4.03），能够将视频自动翻译并配上目标语言的语音。其核心设计理念是模块化、多线程流水线，通过灵活的标志位组合支持多种工作模式。
+`pyvideotrans` 是一款功能强大的开源视频翻译配音工具（v4.13），能够将视频自动翻译并配上目标语言的语音。其核心设计理念是模块化、多线程流水线，通过灵活的标志位组合支持多种工作模式。
 
 ![](https://pvtr2.pyvideotrans.com/1760167240539_image.png)
 
@@ -16,15 +16,16 @@
 
 | 阶段 | 方法 | 职责 |
 |------|------|------|
-| **① 预处理** | `prepare()` | 从视频中分离无声视频流和原始音频流；可选人声/背景分离（UVR/Spleeter）；可选降噪；创建缓存目录和输出目录 |
-| **② 语音识别** | `recogn()` | 调用 ASR 引擎（默认 Faster-Whisper，支持 22 种渠道）将音频转录为带时间戳的 SRT 字幕；可选标点恢复、LLM 重新断句 |
-| **③ 说话人分离** | `diariz()` | 调用说话人分离模型（built、ali_CAM、pyannote、reverb 四种后端），将字幕按说话人归类标注 |
-| **④ 字幕翻译** | `trans()` | 将原始语言 SRT 字幕通过翻译渠道（24 种渠道）翻译为目标语言字幕；支持双语字幕输出 |
-| **⑤ 配音** | `dubbing()` | 根据目标语言字幕内容和时间戳，调用 TTS 引擎（34 种渠道）逐条生成配音音频；支持声音克隆（从原始音频截取参考片段） |
+| **① 预处理** | `prepare()` | 从视频中分离无声视频流和原始音频流以及预先处理各项准备数据：音频转为单声道16k/wav格式；可选人声/背景分离（UVR/Spleeter）；可选降噪(onnx模型)；创建缓存目录和输出目录；决定清理缓存或是使用缓存 |
+| **② 语音识别** | `recogn()` | 调用 ASR 引擎（默认 Faster-Whisper+large-v3-turbo，支持 20+ ）,将音频转录为带时间戳的 SRT 字幕；可选标点恢复/删除、LLM纠错 |
+| **③ 说话人分离** | `diariz()` | 若选择了说话人分离，调用说话人分离模型（built-in(onnx模型)、ali_CAM、pyannote等后端），将字幕按说话人归类标注 （批量视频翻译时禁用分离）|
+| **④ 字幕翻译** | `trans()` | 若原始语言和目标语言不同，则将原始语言 SRT 字幕通过翻译渠道（20+ ）翻译为目标语言字幕；支持双语字幕输出 |
+| **⑤ TTS配音** | `dubbing()` | 若选择了配音角色，则根据目标语言字幕内容和时间戳，调用 TTS 引擎（34 +）逐条生成配音音频；支持声音克隆（从原始音频截取参考片段） |
 | **⑥ 音画对齐** | `align()` | 通过 `SpeedRate` 类处理：配音加速、视频慢放、去除字幕间隙静音、字幕音频强制对齐；完成后可选调节音量 |
-| **⑦ 二次识别** | `recogn2pass()` | 对配音音频再次进行 ASR，生成时间轴精确且短小的字幕（仅在启用配音且非双字幕嵌入时执行） |
+| **⑦ 二次识别** | `recogn2pass()` | 若选择了二次识别，对配音音频再次进行 ASR(固定faster-whisper渠道+large-v3-turo模型(默认，可切换))，生成时间轴精确且短小的字幕（仅在启用配音且非双字幕嵌入时执行） |
 | **⑧ 最终合成** | `assembling()` | 将无声视频流、配音音频、背景音乐、目标语言字幕合并为最终视频文件（ffmpeg） |
 | **⑨ 收尾** | `task_done()` | 将输出文件从临时目录移动到指定输出目录，清理临时文件，发送完成通知 |
+
 
 ### 1.2 流程控制标志位
 
@@ -44,10 +45,11 @@ should_separate: bool  # 是否需要人声背景分离
 
 | 功能 | should_recogn | should_trans | should_dubbing | should_hebing |
 |------|:---:|:---:|:---:|:---:|
-| 视频翻译配音（标准模式） | ✓ | ✓ | ✓ | ✓ |
-| 视频/音频转字幕（tiqu） | ✓ | 可选 | ✗ | ✗ |
-| 字幕配音 | ✗ | ✗ | ✓ | ✓ |
-| 仅翻译字幕文件 | ✗ | ✓ | ✗ | ✗ |
+| 视频翻译 | ✓ | ✓ | ✓ | ✓ |
+| 转录翻译（tiqu） | ✓ | 可选 | ✗ | ✗ |
+| 语音转录 | ✓ | ✗ | ✗ | ✗ |
+| 文字配音 | ✗ | ✗ | ✓ | ✓ |
+| 翻译字幕 | ✗ | ✓ | ✗ | ✗ |
 
 ### 1.4 任务子类体系
 
@@ -55,16 +57,16 @@ should_separate: bool  # 是否需要人声背景分离
 
 | 子类 | 文件 | 继承的 TaskCfg | 使用场景 |
 |------|------|----------------|---------|
-| `TransCreate` | `task/trans_create.py` | `TaskCfgVTT` | 完整视频翻译配音（标准模式 / tiqu 提取模式） |
-| `SpeechToText` | `task/speech2text.py` | `TaskCfgSTT` | 批量语音转字幕 |
-| `DubbingSrt` | `task/dubbing.py` | `TaskCfgTTS` | 批量为字幕配音 |
-| `TranslateSrt` | `task/translate_srt.py` | `TaskCfgSTS` | 批量翻译 SRT 字幕 |
+| `TransCreate` | `task/trans_create.py` | `TaskCfgVTT` | 完整视频翻译配音（标准模式 / tiqu转录同时翻译字幕模式） |
+| `SpeechToText` | `task/speech2text.py` | `TaskCfgSTT` | 语音转录独立功能 |
+| `DubbingSrt` | `task/dubbing.py` | `TaskCfgTTS` | 文字配音独立功能 |
+| `TranslateSrt` | `task/translate_srt.py` | `TaskCfgSTS` | 翻译字幕独立功能 |
 
 ---
 
 ## 二、任务配置数据类体系
 
-v4.03 重构了任务配置为分层继承的 `@dataclass` 体系（`videotrans/task/taskcfg.py`，261 行）：
+任务配置为分层继承的 `@dataclass` 体系（`videotrans/task/taskcfg.py`）：
 
 ```
 @dataclass TaskCfgBase              ← 通用字段（路径、语言代码、缓存目录等）
@@ -200,27 +202,17 @@ WorkerAssemb     →  taskdone_queue  (无条件)
 WorkerTaskDone   →  (终止)
 ```
 
-### 3.4 线程数量动态计算
+### 3.4 线程/进程数量动态计算
 
-`start_thread()`（`videotrans/task/job.py:206-245`）根据 GPU 配置动态决定各 Worker 的实例数：
+- 不存在GPU时，GPU进程固定设为1
+- 存在可用显卡时，进一步根据高级选项中的手动设置，判断应该启动几个GPU进程,  1->min(CPU核数,8)
+- CPU进程数 1 -> min(8,CPU核数,内存/1G, 高级选项中的手动设置数)
+`start_thread()`（`videotrans/task/job.py`）
 
-| Worker | 实例数 | 原因 |
-|--------|--------|------|
-| `WorkerPrepare` | 1 ~ 4 | GPU 密集型操作（视频编解码） |
-| `WorkerRegcon` | 1 ~ 4 | GPU 密集型（ASR 推理） |
-| `WorkerDiariz` | 1 ~ 4 | GPU 密集型（说话人分离） |
-| `WorkerTrans` | **固定 1** | API 调用，避免并发限流 |
-| `WorkerDubb` | **固定 1** | TTS API 调用，避免并发限流 |
-| `WorkerRegcon2Pass` | **固定 1** | 辅助阶段 |
-| `WorkerAlign` | **固定 1** | 音画对齐为单线程 |
-| `WorkerAssemb` | 1 ~ 4 | GPU 密集型（ffmpeg 编码） |
-| `WorkerTaskDone` | **固定 1** | 文件移动/清理 |
-
-`task_nums` 计算逻辑：优先使用 `settings.process_max_gpu` 手动指定值；否则根据 `multi_gpus` + `NVIDIA_GPU_NUMS` 自动检测（1 GPU = 1，2-3 GPU = 2，≥4 GPU = 4，无 GPU = 1）。
 
 ### 3.5 批量任务提交：MultVideo
 
-`MultVideo(QThread)`（`videotrans/task/mult_video.py`，54 行）负责将用户选择的多个视频文件逐个创建 `TransCreate` 对象并推入 `prepare_queue`。支持通过 `batch_nums` 参数控制每批并发数量：
+`MultVideo(QThread)`（`videotrans/task/mult_video.py`）负责将用户选择的多个视频文件逐个创建 `TransCreate` 对象并推入 `prepare_queue`。支持通过 `batch_nums` 参数控制每批并发数量：
 
 - `batch_nums == 0`：全部任务一次性推入队列（最大并发）
 - `batch_nums == 1`：逐次推入，每个任务完成后再推下一个
@@ -248,15 +240,15 @@ WorkerTaskDone   →  (终止)
     │
     ├── @dataclass BaseRecogn         ← videotrans/recognition/_base.py
     │       │                          VAD 音频切分、字幕合并、CJK 处理
-    │       └── 22 个子类（懒加载）    各 ASR 渠道具体实现
+    │       └── 子类（懒加载）    各 ASR 渠道具体实现
     │
     ├── @dataclass BaseTrans          ← videotrans/translator/_base.py
     │       │                          MD5 缓存、逐行/全文翻译调度
-    │       └── 24 个子类（懒加载）    各翻译渠道具体实现
+    │       └── 子类（懒加载）    各翻译渠道具体实现
     │
     └── @dataclass BaseTTS            ← videotrans/tts/_base.py
             │                          异步/多线程并发调度
-            └── 34 个子类（懒加载）    各 TTS 渠道具体实现
+            └── 子类（懒加载）    各 TTS 渠道具体实现
 ```
 
 所有通道类均为 `@dataclass`，使用 `__post_init__` 初始化而非传统构造函数 `__init__`。
@@ -314,7 +306,7 @@ WorkerTaskDone   →  (终止)
 
 ### 4.5 子进程通道
 
-为防止 `faster-whisper` 崩溃导致整个软件退出，`Faster-Whisper`、`Faster-Whisper-XXL` 和 `Whisper.cpp`（以及部分 TTS 引擎如 `QWEN3LOCAL_TTS`）通过 `BaseCon._new_process()` 委托给 `GlobalProcessManager` 在独立子进程中执行。
+为防止 `faster-whisper` 崩溃导致整个软件退出，`Faster-Whisper、OpenAI-whisper、Qwen3-ASR、HuggingFace_ASR`、`Qwen3-TTS、OmniVoice、F5-TTS、Confucius-TTS`等部分重型渠道通过 `BaseCon._new_process()` 委托给 `GlobalProcessManager` 在独立子进程中执行。
 
 子进程通过写入 JSON 日志文件来报告进度。`BaseCon._signal_of_process()` 在守护线程中轮询该日志文件，检测到 mtime 变化时解析 JSON 并通过 `signal()` 上报。
 
@@ -326,9 +318,9 @@ WorkerTaskDone   →  (终止)
 
 | 配置类 | 持久化 | 用途 | 示例字段 |
 |--------|--------|------|---------|
-| `AppCfg` | 纯内存 | 队列、状态、线程控制、运行时上下文 | `prepare_queue`, `exit_soft`, `stoped_uuid_set`, `current_status`, `line_roles`, `exec_mode`, `video_codec`, `onlyone_source_sub`, `onlyone_target_sub`, `proxy`, `SUPPORT_LANG` |
-| `AppSettings` | `videotrans/cfg.json` | 全局默认设置、模型列表 | `homedir`, `model_list`, `vad_type`, `cuda_com_type` |
-| `AppParams` | `videotrans/params.json` | 用户偏好、API 密钥 | `source_language`, `recogn_type`, `chatgpt_key`, `voice_role`, `app_mode` |
+| `AppCfg` | 纯内存 | 队列、状态、线程控制、运行时上下文、CPU、GPU进程数量 | `prepare_queue`, `exit_soft`, `stoped_uuid_set`, `current_status`, `line_roles`, `exec_mode`, `video_codec`, `onlyone_source_sub`, `onlyone_target_sub`, `proxy`, `SUPPORT_LANG` |
+| `AppSettings` | `videotrans/cfg.json` | 高级选项各设置、模型列表 | `homedir`, `model_list`, `vad_type`, `cuda_com_type` |
+| `AppParams` | `videotrans/params.json` | API 密钥、各种界面设置 | `source_language`, `recogn_type`, `chatgpt_key`, `voice_role`, `app_mode` |
 
 关键单例变量在模块加载时自动初始化：
 
@@ -381,21 +373,15 @@ params: AppParams = AppParams()    # 从 params.json 加载
 ```
 GlobalProcessManager (类级别单例)
     ├── _executor_cpu: multiprocessing.Pool
-    │       workers = max(min(available_ram/4GB, 8, cpu_count), 1)  ← 基于剩余内存量计算
+    │       workers = app_cfg.MAX_CPU_PROCESS 
     │       maxtasksperchild = 1  ← 每个子进程执行一个任务后重启，防内存泄漏
     │
     └── _executor_gpu: multiprocessing.Pool
-            workers = GPU 数量（优先 settings.process_max_gpu 手动设置）
+            workers = app_cfg.MAX_GPU_PROCESS
             maxtasksperchild = 1
 ```
 
-### 6.1 CPU 进程池规模
 
-不再使用固定公式，而是通过 `psutil.virtual_memory().available` 获取当前系统剩余内存，按每 4GB 一个进程计算，限制在 **1~8** 之间，且不超过 `os.cpu_count()`。可通过 `settings.process_max` 手动覆盖。
-
-### 6.2 GPU 进程池规模
-
-优先使用 `settings.process_max_gpu` 手动设置值；否则根据 `multi_gpus` 和 `NVIDIA_GPU_NUMS` 自动确定（无显卡 = 1，有显卡但未启用多显卡 = 1，启用多显卡 = min(GPU 数量, 8, cpu_count)）。
 
 ### 6.3 任务提交接口
 
@@ -497,9 +483,9 @@ def get_class(channel_id=0, provider_type=None, _ID_NAME_DICT=None):
 
 | 模块 | 渠道数 | 定义位置 |
 |------|--------|---------|
-| 识别 (recognition) | 22 | `videotrans/recognition/__init__.py:48-79` |
-| 翻译 (translator) | 24 | `videotrans/translator/__init__.py:60-90` |
-| 配音 (tts) | **34** | `videotrans/tts/__init__.py:75-116` |
+| 语音识别 (recognition) | 20+ | `videotrans/recognition/__init__.py:48-79` |
+| 字幕翻译 (translator) | 20+ | `videotrans/translator/__init__.py:60-90` |
+| 文字配音 (tts) | **30+** | `videotrans/tts/__init__.py:75-116` |
 
 ### 8.1 统一入口函数
 
@@ -536,7 +522,7 @@ def run(*, queue_tts, language, tts_type, ...) -> None:
 ### 8.4 CJK 特殊处理
 
 `BaseRecogn`（`videotrans/recognition/_base.py:58-80`）在 `__post_init__` 中对中日韩等语言进行特殊处理：
-- `join_word_flag`：CJK 语言（zh, ja, ko, yu, th, km, yue）字幕词间不加空格（其他语言加空格）
+- `join_word_flag`：CJK 语言（zh, ja, ko, yue, th, km）字幕词间不加空格（其他语言加空格）
 - `maxlen`：CJK 语言每行最大字符数为 `settings.cjk_len`（默认 15），其他语言为 `settings.other_len`（默认 40）
 - `jianfan`：中文语言且 `settings.zh_hant_s=True` 时启用繁简转换
 
@@ -564,7 +550,7 @@ def run(*, queue_tts, language, tts_type, ...) -> None:
 
 ## 九、交互式单视频处理模式
 
-当用户选择 **1 个视频** 且在**标准模式（biaozhun）**下时，程序采用不同于批量流水线的处理模型。
+当用户选择 **1 个视频** 且在**标准模式**下时，程序采用不同于批量流水线的处理模型。
 
 ### 9.1 实现：Worker(QThread)
 
@@ -585,7 +571,7 @@ Worker.run()
     ├── [暂停点 ③] → _post(type='edit_dubbing')
     │    用户修改配音结果 → 点击"确定"
     ├── trk.align()
-    ├── trk.recogn2pass()
+    ├── trk.recogn2pass() 暂停点，修改二次识别后的结果	
     ├── trk.assembling()
     └── trk.task_done()
 ```
@@ -612,6 +598,7 @@ Worker.run()
 | `EditRecognResultDialog` | `component/onlyone_set_recogn.py` | 原始字幕编辑（文本 + 时间轴） |
 | `SpeakerAssignmentDialog` | `component/onlyone_set_role.py` | 翻译字幕编辑 + 逐行分配配音角色 |
 | `EditDubbingResultDialog` | `component/onlyone_set_editdubb.py` | 配音结果试听 + 单独重新配音 |
+| `EditRecognResultDialog2` | `component/onlyone_set_recogn2.py` | 二次识别字幕编辑（文本 + 时间轴） |
 
 ![](https://pvtr2.pyvideotrans.com/1760192881455_image.png)
 ![](https://pvtr2.pyvideotrans.com/1760192930833_image.png)
@@ -629,8 +616,8 @@ Worker.run()
 
 | 条件 | 策略 |
 |------|------|
-| 启用音频加速 + 视频慢速 | 各负担一半时间差（忽略倍率限制） |
 | 仅启用音频加速 | 加速配音到匹配字幕时长（最高不超过 `max_audio_speed_rate`） |
+| 启用音频加速 + 视频慢速 | 各负担一半时间差（忽略倍率限制） |
 | 仅启用视频慢速 | 慢放视频片段到匹配配音时长（最高不超过 `max_video_pts_rate`） |
 | 两者均未启用 | 按字幕时间轴拼接音频片段，填充静音/定格处理时长差异 |
 
@@ -649,7 +636,7 @@ Worker.run()
 
 ### 11.1 启动流程
 
-`sp.py` 是唯一入口（221 行），启动过程如下：
+`sp.py` 是唯一入口，启动过程如下：
 
 ```
 sp.py (if __name__ == "__main__")
@@ -695,23 +682,22 @@ sp.py (if __name__ == "__main__")
 ### 11.3 UI 架构分层
 
 ```
-UI 定义层         videotrans/ui/         ← PySide6 UI 布局文件（~75 个），dark/ 资源文件
+UI 定义层         videotrans/ui/         ← PySide6 UI 布局文件，dark/ 资源文件
     ↓
-UI 逻辑层         videotrans/component/   ← 通用组件：进度条、设置表单、字幕编辑器、实时语音识别、视频裁剪、文本比对
     ↓
-窗口管理层        videotrans/winform/     ← 懒加载的 ~65 个设置/功能窗口模块
+窗口管理层        videotrans/winform/     ← 懒加载的设置/功能窗口模块
     ↓
 主窗口层          videotrans/mainwin/
-    ├── main_win.py                      ← MainWindow(QMainWindow): UI 初始化、信号绑定、Worker 启动、窗口生命周期（528 行）
-    ├── _actions.py                       ← WinAction: 核心业务逻辑 → 参数收集 → 任务启动 → 状态分发（798 行）
-    └── _actions_base.py                 ← WinActionBase: 代理管理、模式切换、文件选择、CUDA 检测、试听（590 行）
+    ├── main_win.py                      ← MainWindow(QMainWindow): UI 初始化、信号绑定、Worker 启动、窗口生命周期
+    ├── _actions.py                       ← WinAction: 核心业务逻辑 → 参数收集 → 任务启动 → 状态分发
+    └── _actions_base.py                 ← WinActionBase: 代理管理、模式切换、文件选择、CUDA 检测、试听
     ↓
 任务层            videotrans/task/        ← TransCreate、SpeechToText、DubbingSrt、TranslateSrt、Worker 线程、SpeedRate
 ```
 
 ### 11.4 MainWindow——主窗口
 
-`videotrans/mainwin/main_win.py`（528 行）职责：
+`videotrans/mainwin/main_win.py`职责：
 - `setupUi()`：加载 UI 布局，填充下拉列表（翻译渠道、识别渠道、TTS 渠道、语言、字幕类型）
 - `_bind_signal()`：绑定约 60 个控件事件到 `WinAction` 方法
 - `_start_workers(status)`：GPU 检测完成后启动 9 种 Worker 后台线程
@@ -731,7 +717,7 @@ UI 逻辑层         videotrans/component/   ← 通用组件：进度条、设�
 - CUDA 检测（`check_cuda()`, `cuda_isok()`）
 - 试听功能（`listen_voice_fun()`）—— 创建 `ListenVoice` 线程
 - 角色列表更新（`tts_type_change()`, `set_voice_role()`）
-- 高级选项折叠（`toggle_adv()`）
+- 更多设置选项折叠（`toggle_adv()`）
 - UI 启用/禁用控制（`disabled_widget()`, `_disabled_button()`）
 
 **WinAction**（`mainwin/_actions.py`，798 行）提供：
@@ -772,7 +758,7 @@ VideoTransError (基类)
 
 ```
 /
-├── sp.py                       # ★ 主程序入口（221 行）
+├── sp.py                       # ★ 主程序入口
 ├── cli.py                      # ★ CLI 命令行入口
 ├── models/                     # 存放本地 AI 模型文件（ONNX 等）
 ├── logs/                       # 日志文件目录（YYYYMMDD.log）
@@ -780,7 +766,7 @@ VideoTransError (基类)
 ├── f5-tts/                     # 声音克隆参考音频存放目录
 ├── docs/                       # 文档
 ├── tmp/                        # 临时文件根目录
-│   ├── _temp/                  # 进程级临时目录
+│   ├── dubbing_cache/          # 配音缓存
 │   └── translate_cache/        # 翻译 MD5 缓存目录
 │
 └── videotrans/                 # 核心业务逻辑代码
@@ -790,100 +776,96 @@ VideoTransError (基类)
     │   codec.json              # 视频编解码器缓存
     │
     ├── codes/
-    │   └── model.py            # 模型相关定义
+    │   └── model.py            # 第三方模型相关定义
     │
     ├── configure/              # 全局配置、队列定义、顶层基类
-    │   ├── config.py           # ★ AppCfg / AppSettings / AppParams / logger / 队列定义 / tr() / push_queue()（902 行）
-    │   ├── base.py             # ★ BaseCon 基类（_new_process, signal, _exit, convert_to_wav 等）（296 行）
+    │   ├── config.py           # ★ AppCfg / AppSettings / AppParams / logger / 队列定义 / tr() / push_queue()
+    │   ├── base.py             # ★ BaseCon 基类（_new_process, signal, _exit, convert_to_wav 等）
     │   ├── contants.py         # ★ 全局常量（模型列表、语言测试文本、标点符号、代理白名单等）
-    │   ├── excepts.py          # ★ 异常体系 + get_msg_from_except()（376 行）
-    │   ├── signal_hub.py       # ★ SignalHub 单例（跨线程 Qt 信号）（33 行）
+    │   ├── excepts.py          # ★ 异常体系 + get_msg_from_except()
+    │   ├── signal_hub.py       # ★ SignalHub 单例（跨线程 Qt 信号）
     │   └── whispernet_config.py # Whisper.NET 配置
     │
     ├── task/                   # 任务处理逻辑与后台线程
-    │   ├── _base.py            # ★ BaseTask 基类（8 阶段空方法 + 5 标志位 + 共享工具方法）（167 行）
-    │   ├── taskcfg.py          # ★ TaskCfgBase/VTT/STT/TTS/STS + InputFile + SignMsg + SrtItem（261 行）
-    │   ├── trans_create.py     # ★ TransCreate 完整实现（~1678 行，视频翻译核心）
-    │   ├── speech2text.py      # ★ SpeechToText（批量语音转字幕）
-    │   ├── dubbing.py          # ★ DubbingSrt（批量字幕配音）
-    │   ├── translate_srt.py    # ★ TranslateSrt（批量翻译 SRT 字幕）
-    │   ├── job.py              # ★ 9 种 BaseWorker 子类 + start_thread() 入口（245 行）
-    │   ├── only_one.py         # ★ 单视频交互式 Worker(QThread) + uito 信号（148 行）
-    │   ├── mult_video.py       # ★ 多视频批量提交 MultVideo(QThread)（54 行）
-    │   ├── _rate.py            # SpeedRate / TtsSpeedRate 音画对齐引擎（877 行）
+    │   ├── _base.py            # ★ BaseTask 基类
+    │   ├── taskcfg.py          # ★ TaskCfgBase/VTT/STT/TTS/STS + InputFile + SignMsg + SrtItem
+    │   ├── trans_create.py     # ★ TransCreate 完整实现（视频翻译核心）
+    │   ├── speech2text.py      # ★ SpeechToText（语音转录独立功能）
+    │   ├── dubbing.py          # ★ DubbingSrt（文字配音独立功能配音）
+    │   ├── translate_srt.py    # ★ TranslateSrt（翻译字幕独立功能）
+    │   ├── job.py              # ★ 9 种 BaseWorker 子类 + start_thread() 入口
+    │   ├── only_one.py         # ★ 单视频交互式 Worker(QThread) + uito 信号
+    │   ├── mult_video.py       # ★ 多视频批量提交 MultVideo(QThread)
+    │   ├── _rate.py            # SpeedRate / TtsSpeedRate 音画对齐引擎
     │   ├── separate_worker.py  # SeparateWorker 独立人声分离 QThread
     │   ├── simple_runnable_qt.py # QRunnable 线程池工具
     │   ├── child_win_sign.py   # 子窗口信号处理
-    │   └── update_ffmpeg.py    # ffmpeg 更新管理
+    │   └── update_ffmpeg.py    # ffmpeg 更新脚本
     │
-    ├── recognition/            # 语音识别 (ASR) 模块（22 个渠道）
-    │   ├── __init__.py         # ★ 渠道常量 ID、_ID_NAME_DICT、run()、is_allow_lang()、is_input_api()
-    │   ├── _base.py            # ★ BaseRecogn（VAD 分割、CJK 处理、字幕合并，400 行）
-    │   └── _*.py               # 22 个渠道实现（_whisper, _whisperx, _whispernet, _qwenasrlocal, _qwen3asr, _funasr 等）
+    ├── recognition/            # 语音识别 (ASR) 渠道包
+    │   ├── _constants.py       # ★ 渠道常量 名称等定义
+    │   ├── _base.py            # ★ BaseRecogn（语音识别基类）
+    │   └── _*.py               # 渠道实现代码
     │
-    ├── translator/             # 字幕翻译模块（24 个渠道）
-    │   ├── __init__.py         # ★ 渠道常量、_ID_NAME_DICT、LANG_CODE、run()、is_allow_translate()（860 行）
-    │   ├── _base.py            # ★ BaseTrans（MD5 缓存、逐行/全文翻译调度，176 行）
-    │   └── _*.py               # 24 个渠道实现（_google, _chatgpt, _deepseek, _gemini, _deepl, _baidu 等）
+    ├── translator/             # 字幕翻译渠道包
+    │   ├── _constants.py         # ★ 渠道常量 名称等定义
+    │   ├── _base.py            # ★ BaseTrans（字幕翻译渠道基类）
+    │   └── _*.py               # 渠道实现代码
     │
-    ├── tts/                    # 文本转语音 (TTS) 模块（**34** 个渠道）
-    │   ├── __init__.py         # ★ 渠道常量 ID、_ID_NAME_DICT、SUPPORT_CLONE、CHANGE_BY_LANGUAGE、run()（192 行）
-    │   ├── _base.py            # ★ BaseTTS（异步/多线程并发调度，304 行）
-    │   └── _*.py               # 34 个渠道实现（_edgetts, _openaitts, _azuretts, _gptsovits, _cosyvoice 等）
+    ├── tts/                    # 文字配音 (TTS) 包
+    │   ├── _constants.py         # ★ 渠道常量 名称等定义
+    │   ├── _base.py            # ★ BaseTTS（文字配音基类）
+    │   └── _*.py               # 渠道实现代码
     │
-    ├── process/                # 独立子进程实现
+    ├── process/                # 独立子进程实现：主要用于重型任务，例如语音识别、语音合成大模型等
     │   ├── __init__.py         # 子进程函数导出
-    │   ├── signelobj.py        # ★ GlobalProcessManager（CPU/GPU 双进程池，167 行）
-    │   ├── prepare_audio.py    # 人声分离、降噪、标点恢复、说话人分离（4 种后端）
+    │   ├── signelobj.py        # ★ GlobalProcessManager（CPU/GPU 双进程池）
+    │   ├── prepare_audio.py    # 人声分离、降噪、标点恢复、说话人分离
     │   ├── stt_fun.py          # ASR 子进程入口（openai_whisper, faster_whisper, paraformer, funasr_mlt, qwen3asr_fun 等）
     │   ├── tts_fun.py          # TTS 子进程入口（qwen3tts_fun）
-    │   └── vad.py              # VAD 语音活动检测（Silero VAD）
+    │   └── vad.py              # VAD 语音活动检测（已改为主进程中实现）
     │
     ├── mainwin/                # 主窗口界面与业务逻辑
-    │   ├── main_win.py         # ★ MainWindow(QMainWindow) 初始化、信号绑定、线程启动（528 行）
-    │   ├── _actions.py         # ★ WinAction 核心控制器（检查、启动、状态更新，798 行）
-    │   └── _actions_base.py    # ★ WinActionBase 基类（代理、模式切换、CUDA、文件选择，590 行）
+    │   ├── main_win.py         # ★ MainWindow(QMainWindow) 初始化、信号绑定、线程启动
+    │   ├── _actions.py         # ★ WinAction 核心控制器（检查、启动、状态更新）
+    │   └── _actions_base.py    # ★ WinActionBase 基类
     │
     ├── component/              # UI 通用组件
     │   ├── progressbar.py      # 可点击进度条
-    │   ├── set_form.py         # 通用设置表单 / 关于页面
     │   ├── onlyone_set_recogn.py    # 单视频模式：原始字幕编辑对话框
+    │   ├── onlyone_set_recogn2.py    # 单视频模式：二次识别后的字幕编辑对话框
     │   ├── onlyone_set_role.py      # 单视频模式：说话人角色分配对话框
     │   ├── onlyone_set_editdubb.py  # 单视频模式：配音结果编辑对话框
-    │   ├── clip_video.py       # 视频裁剪组件
-    │   ├── realtime_stt.py     # 实时语音识别窗口
-    │   ├── textmatching.py     # 文本比对窗口
-    │   ├── set_proxy.py        # 代理设置弹窗
-    │   ├── set_ass.py          # ASS 字幕样式设置
+    │   ├── clip_video.py       # 按字幕裁剪视频功能
+    │   ├── realtime_stt.py     # 实时语音识别功能
+    │   ├── textmatching.py     # 文本匹配与打轴功能
+    │   ├── set_ass.py          # 硬字幕样式设置
     │   ├── set_cpp.py          # Whisper.cpp 路径设置
     │   ├── set_xxl.py          # Faster-Whisper-XXL 路径设置
-    │   ├── set_subtitles_length.py # 字幕长度设置
-    │   ├── set_threads.py      # 线程数设置
     │   └── controlobj.py       # 控件对象管理
     │
-    ├── ui/                     # PySide6 UI 定义文件（~75 个.py 文件）
+    ├── ui/                     # PySide6 UI 定义文件
     │   ├── en.py               # ★ 主窗口 UI 布局定义
     │   ├── chatgpt.py, deepseek.py, gemini.py, ...    # 各渠道设置对话框布局
-    │   ├── videoandaudio.py, separate.py, peiyin.py, ... # 功能窗口布局
+    │   ├── menu_list.py 		# 菜单定义配置文件
     │   └── dark/               # 暗色主题资源（darkstyle_rc.py, palette.py）
     │
-    ├── winform/                # 各渠道设置窗口懒加载管理（~65 个模块）
-    │   ├── __init__.py         # ★ get_win() 懒加载入口 + _module_map（91 行）
-    │   ├── chatgpt.py, azure.py, baidu.py, ...  # ~50 个渠道设置窗口（openwin()）
-    │   └── fn_*.py             # ~10 个独立功能窗口（批量语音转字幕、批量为字幕配音、批量翻译srt字幕等）
+    ├── winform/                # 各渠道设置窗口
+    │   ├── __init__.py         # ★ get_win() 懒加载入口 
+    │   ├── chatgpt.py, azure.py, baidu.py, ...  # 渠道设置窗口
     │
     ├── styles/                 # UI 样式与媒体资源
     │   ├── style.qss           # Qt 样式表
     │   ├── logo.png            # 启动画面 logo
     │   ├── icon.ico            # 应用图标
     │   ├── simhei.ttf          # 黑体中文字体
-    │   ├── preview.png         # 预览图
-    │   ├── no-remove.mp4       # 防清理的占位视频
-    │   └── no-remove.wav       # 防清理的占位音频
+    │   ├── preview.png         # 设置硬字幕样式用预览图
+    │   ├── no-remove.mp4       # 测试硬编码支持用轻量占位视频
+    │   └── no-remove.wav       # 测试硬编码支持用轻量占位视频
     │
     ├── util/                   # 通用工具函数（18 个文件）
     │   ├── tools.py            # ★ 核心工具函数（ffmpeg 封装、字幕解析/格式化、文件操作、系统通知、模型下载）
-    │   ├── gpus.py             # GPU 检测与分配（get_cudaX 获取可用 GPU 索引）
+    │   ├── gpus.py             # GPU 检测与分配
     │   ├── checkgpu.py         # GPU 检测线程（AiLoaderThread）
     │   ├── ListenVoice.py      # 声音试听功能（ListenVioce QThread）
     │   ├── req_fac.py          # HuggingFace 自定义 session 工厂
@@ -899,15 +881,14 @@ VideoTransError (基类)
     │   └── TestSTT.py          # STT 测试工具
     │
     ├── language/               # 界面多语言 JSON 文件
-    │   ├── en.json
-    │   ├── zh.json
-    │   └── ...                 # 30+ 语言
+    │   ├── en_US.json
+    │   ├── zh_CN.json
     │
-    ├── prompts/                # AI 翻译提示词模板（31 个文件）
+    ├── prompts/                # AI 翻译提示词模板
     │   ├── srt/                # SRT 格式翻译 prompt（chatgpt.txt, deepseek.txt 等 13 个）
-    │   ├── text/               # 纯文本翻译 prompt（同 13 个）
-    │   ├── recogn/             # 语音识别 prompt（gemini_recogn.txt）
-    │   └── recharge/           # LLM重新断句 prompt（recharge-llm.txt）
+    │   ├── language_prompts/   # 针对各个目标语言动态插入的 语言要求提示词片段
+    │   ├── text/               # 纯文本翻译 prompt
+    │   └── recharge/           # LLM纠错 prompt（llm.txt）
     │
     └── voicejson/              # TTS 音色配置文件（14 个 JSON）
         ├── edge_tts.json       # Edge-TTS 各语言音色列表
@@ -918,100 +899,10 @@ VideoTransError (基类)
 
 ---
 
-## 十四、扩展开发指南
-
-### 14.1 新增一个翻译通道
-
-假设要新增翻译通道 `MyTranslator`：
-
-#### Step 1: 创建通道实现文件
-
-在 `videotrans/translator/` 下创建 `_mytranslator.py`：
-
-```python
-from dataclasses import dataclass
-from videotrans.translator._base import BaseTrans
-
-@dataclass
-class MyTranslator(BaseTrans):
-    def __post_init__(self):
-        super().__post_init__()
-        self.api_url = 'https://api.example.com/translate'
-
-    def _item_task(self, data: dict) -> str:
-        text = data['text']
-        source = data['source_code']
-        target = data['target_code']
-        result = call_my_api(text, source, target)
-        return result
-```
-
-#### Step 2: 分配渠道 ID 并注册
-
-在 `videotrans/translator/__init__.py` 中：
-
-```python
-MYTRANSLATOR_INDEX = 24   # 分配不重复的整数 ID
-
-# 在 _ID_NAME_DICT 末尾添加：
-_ID_NAME_DICT[MYTRANSLATOR_INDEX] = ChannelProvider(
-    "My Translator",
-    imp="._mytranslator",
-    key_name="mytranslator_key",
-    win="mytranslator"
-)
-```
-
-#### Step 3: 添加用户配置字段
-
-在 `videotrans/configure/config.py` 的 `AppParams._get_defaults()` 中添加：
-
-```python
-"mytranslator_key": "",
-"mytranslator_model": "model-v1",
-```
-
-#### Step 4: 创建设置窗口
-
-在 `videotrans/winform/` 下创建 `mytranslator.py`，实现 `openwin()` 函数。在 `videotrans/winform/__init__.py` 的 `_module_map` 中注册：
-
-```python
-"mytranslator": ".mytranslator",
-```
-
-#### Step 5: 可选扩展
-
-- 在 `is_allow_translate()` 中添加语言兼容性检测
-- 在 `ui/` 目录下新增界面文件
-- 在菜单 `ui/en.py` 中添加对应 Action
 
 ---
 
-### 14.2 新增一个 TTS 通道
-
-步骤与翻译通道类似：
-
-1. 创建 `videotrans/tts/_mytts.py`，继承 `BaseTTS`
-2. 在 `videotrans/tts/__init__.py` 中分配 ID 并注册 `_ID_NAME_DICT`
-3. 如需声音克隆支持，将 ID 加入 `SUPPORT_CLONE` 列表
-4. 如需语言跟随角色变化，将 ID 加入 `CHANGE_BY_LANGUAGE` 列表
-5. 在 `AppParams._get_defaults()` 中添加对应的 API Key / URL 配置字段
-6. 在 `videotrans/winform/` 和 `_module_map` 中注册设置窗口
-
-### 14.3 新增一个识别通道
-
-步骤同翻译/TTS，渠道实现类继承 `BaseRecogn`，必须实现 `.run()` 方法返回 `List[SrtItem]`。
-
-### 14.4 常规约定
-
-- 所有渠道类使用 `@dataclass` + `__post_init__`
-- 通过 `get_class(channel_id, "recognition/translator/tts", _ID_NAME_DICT)` 懒加载
-- API key 校验依赖 `is_input_api()` 函数 + `_ID_NAME_DICT` 中的 `key_name` / `win` 字段
-- 翻译/配音引擎内部并发数由 `settings` 中的对应字段控制
-
----
-
-> **版本**: v4.03 (VERSION_NUM=403)
+> **版本**: v4.13
 > **主页**: https://github.com/jianchang512/pyvideotrans
 > **文档**: https://pyvideotrans.com
 > **BBS**: https://bbs.pyvideotrans.com

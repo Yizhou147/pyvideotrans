@@ -13,18 +13,17 @@ from videotrans.task.taskcfg import SrtItem
 from videotrans.util._srt_parse import ms_to_time_string
 
 
-@dataclass
+@dataclass(repr=False)
 class AI302Recogn(BaseRecogn):
 
     @retry(retry=retry_if_not_exception_type(NO_RETRY_EXCEPT), stop=(stop_after_attempt(settings.get('retry_nums'))), wait=wait_fixed(2), before=before_log(logger, logging.INFO),  after=after_log(logger, logging.INFO))
     def _exec(self) -> Union[List[SrtItem], None]:
         if self._exit(): return
         self.signal(text=f"start speech to srt")
-        model_name = params.get('ai302_model_recogn','whisper-1')
-        if model_name=='gpt-4o-transcribe-diarize':
+        if self.model_name=='gpt-4o-transcribe-diarize':
             # 说话人识别模型
             return self._diarize()
-        if model_name.startswith('gpt-4o-'):
+        if self.model_name.startswith('gpt-4o-'):
             # gpt-4o 只可返回json格式
             return self._thrid_api()
         
@@ -37,14 +36,14 @@ class AI302Recogn(BaseRecogn):
             'Authorization': f'Bearer {apikey}',
         }
 
-        prompt = settings.get(f'initial_prompt_{self.detect_language}')
+        prompt = settings.get(f'initial_prompt_{self.detect_language.replace("-","_")}')
 
         with open(self.audio_file, 'rb') as f:
             audio_data = f.read()
         response = requests.post(url,
                                  files={"file": (Path(self.audio_file).name, audio_data)},
                                  data={
-                                     "model": model_name,
+                                     "model": self.model_name,
                                      'response_format': 'verbose_json',
                                      'prompt': prompt,
                                      'language': langcode},
@@ -72,7 +71,7 @@ class AI302Recogn(BaseRecogn):
 
     def _thrid_api(self):
         # 发送请求
-        model_name = params.get('ai302_model_recogn','whisper-1')
+
         raws = self.cut_audio()
         apikey = params.get('ai302_key')
         langcode = self.detect_language.split('-')[0].lower()
@@ -81,16 +80,16 @@ class AI302Recogn(BaseRecogn):
             'Accept': 'application/json',
             'Authorization': f'Bearer {apikey}',
         }
-        prompt = settings.get(f'initial_prompt_{self.detect_language}')
+        prompt = settings.get(f'initial_prompt_{self.detect_language.replace("-","_")}')
         err=''
         ok_nums=0
         for i, it in enumerate(raws):
             with open(it['filename'], 'rb') as f:
                 audio_chunk = f.read()
             response = requests.post(url,
-                 files={"file": (Path(it['file']).name, audio_chunk)},
+                 files={"file": (Path(it['filename']).name, audio_chunk)},
                  data={
-                     "model": model_name,
+                     "model": self.model_name,
                      'response_format': 'json',
                      'prompt': prompt,
                      'language': langcode},
@@ -125,7 +124,7 @@ class AI302Recogn(BaseRecogn):
         response = requests.post(url,
              files={"file": (Path(self.audio_file).name, audio_data)},
              data={
-                 "model": 'gpt-4o-transcribe-diarize',
+                 "model": self.model_name,
                  'response_format': 'diarized_json',
                  # 'prompt': prompt,
                  'language': langcode},

@@ -123,6 +123,41 @@ class TestTranslatorIndexConstants:
         assert LITELLM_INDEX == 25
         assert LITELLM_INDEX in AI_TRANS_CHANNELS
 
+    def test_api_route_index(self):
+        from videotrans.translator import API_ROUTE_INDEX, AI_TRANS_CHANNELS
+        assert API_ROUTE_INDEX == 26
+        assert API_ROUTE_INDEX in AI_TRANS_CHANNELS
+
+    def test_cheaperinference_index(self):
+        from videotrans.translator import CHEAPERINFERENCE_INDEX, AI_TRANS_CHANNELS
+        assert CHEAPERINFERENCE_INDEX == 27
+        assert CHEAPERINFERENCE_INDEX in AI_TRANS_CHANNELS
+
+    def test_atlascloud_index(self):
+        from videotrans.translator import ATLASCLOUD_INDEX, AI_TRANS_CHANNELS
+        assert ATLASCLOUD_INDEX == 29
+        assert ATLASCLOUD_INDEX in AI_TRANS_CHANNELS
+
+    def test_opper_index(self):
+        from videotrans.translator import OPPER_INDEX, AI_TRANS_CHANNELS
+        assert OPPER_INDEX == 30
+        assert OPPER_INDEX in AI_TRANS_CHANNELS
+
+    def test_runcrate_index(self):
+        from videotrans.translator import RUNCRATE_INDEX, AI_TRANS_CHANNELS
+        assert RUNCRATE_INDEX == 31
+        assert RUNCRATE_INDEX in AI_TRANS_CHANNELS
+
+    def test_cloudgpu_index(self):
+        from videotrans.translator import CLOUDGPU_INDEX, AI_TRANS_CHANNELS
+        assert CLOUDGPU_INDEX == 32
+        assert CLOUDGPU_INDEX in AI_TRANS_CHANNELS
+
+    def test_infistar_index(self):
+        from videotrans.translator import INFISTAR_INDEX, AI_TRANS_CHANNELS
+        assert INFISTAR_INDEX == 28
+        assert INFISTAR_INDEX in AI_TRANS_CHANNELS
+
     def test_siliconflow_index(self):
         from videotrans.translator import SILICONFLOW_INDEX
         assert SILICONFLOW_INDEX == 10

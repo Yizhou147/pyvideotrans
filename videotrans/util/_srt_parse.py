@@ -49,12 +49,12 @@ def is_srt_string(input_text: str) -> bool:
 @lru_cache
 def cleartext(text: str) -> str:
     res_text = text.replace('&#39;', "").replace('&quot;', '').replace("\u200b", " ").strip()
-    res_text = re.sub(r'([，。！？,.?]\s?){2,}', ',', res_text, flags=re.I | re.S)
+    res_text = re.sub(r'([，。！？,.?][^\S\n]?){2,}', ',', res_text, flags=re.I | re.S)
     return res_text
 
 
 def delete_punc(text):
-    pattern = r'[,?/;\':，。？、：；！!""''"()（）]+|(?<!\d)\.|\.(?!\d)'
+    pattern = r'''[,?/;:，。？、：；！!]+|(?<!\d)\.|\.(?!\d)'''
     res = re.sub(pattern, ' ', text)
     return re.sub(r'\s+', ' ', res).strip()
 
@@ -92,7 +92,7 @@ def format_time(s_time="", separate=',') -> str:
     hou = f'{int(hou):02}'[-2:]
     min = f'{int(min):02}'[-2:]
     sec = f'{int(sec):02}'
-    ms = f'{int(ms):03}'[-3:]
+    ms = f'{int(str(ms).ljust(3, "0")[:3]):03}'
     return f"{hou}:{min}:{sec}{separate}{ms}"
 
 
@@ -110,7 +110,8 @@ def srt_str_to_listdict(srt_string: str) -> List[SrtItem]:
 
             def parse_time(time_groups):
                 h, m, s, ms = time_groups
-                ms = ms.replace(',', '').replace('.', '') if ms else "0"
+                # the fraction is a decimal part of the second: ",5" is 500 ms
+                ms = ms[1:].ljust(3, '0')[:3] if ms else "0"
                 try:
                     return int(h) * 3600000 + int(m) * 60000 + int(s) * 1000 + int(ms)
                 except (ValueError, TypeError):
@@ -201,7 +202,7 @@ def get_subtitle_from_srt(srtfile, *, is_file=True) -> List[SrtItem]:
                 end_time=2000,
                 endraw="00:00:02,000",
                 time="00:00:00,000 --> 00:00:02,000",
-                text="\n".join(content)
+                text=content
             )
         ]
     return result
@@ -230,3 +231,107 @@ def get_srt_from_list(srt_list: List[SrtItem]) -> str:
 
         txt += f"{line}\n{startraw} --> {endraw}\n{it['text']}\n\n"
     return txt
+
+
+
+def ass_to_srt(src_ass_file, dst_srt_file, get_speaker=False):
+    """将 ASS 字幕转为 SRT 字幕
+
+    :param src_ass_file: 源 .ass 文件路径
+    :param dst_srt_file: 输出 .srt 文件路径
+    :param get_speaker: 是否提取说话人，若为 True 且存在说话人，则格式为 [说话人]字幕文本
+    """
+
+    def ass_time_to_srt_time(ass_time):
+        """ASS时间戳转SRT时间戳
+
+        ASS: H:MM:SS.cs (例: 0:01:05.12)
+        SRT: HH:MM:SS,mmm (例: 00:01:05,120)
+        """
+        parts = ass_time.strip().split(":")
+        h = int(parts[0])
+        m = int(parts[1])
+        s_parts = parts[2].split(".")
+        s = int(s_parts[0])
+
+        # 处理小数部分（ASS 通常为 2 位厘秒，SRT 为 3 位毫秒）
+        cs = s_parts[1] if len(s_parts) > 1 else "0"
+        cs = (cs + "00")[:2]  # 补齐或截断至2位厘秒
+        ms = int(cs) * 10
+
+        return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+    events = []
+    in_events_section = False
+    format_cols = []
+
+    # 1. 解析 ASS 文件
+    with open(src_ass_file, "r", encoding="utf-8-sig") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+
+            # 检测 [Events] 区块
+            if line.lower() == "[events]":
+                in_events_section = True
+                continue
+
+            if in_events_section:
+                # 如果遇到下一个区块，结束解析
+                if line.startswith("[") and line.endswith("]"):
+                    break
+
+                # 获取字段列名结构
+                if line.startswith("Format:"):
+                    format_cols = [
+                        col.strip().lower()
+                        for col in line[len("Format:") :].split(",")
+                    ]
+                    continue
+
+                # 解析每条字幕
+                if line.startswith("Dialogue:"):
+                    if not format_cols:
+                        continue
+
+                    # Text 字段本身可能包含逗号，因此按列数限制 split 切割次数
+                    content = line[len("Dialogue:") :].strip()
+                    values = content.split(",", len(format_cols) - 1)
+
+                    if len(values) < len(format_cols):
+                        continue
+
+                    row = dict(zip(format_cols, values))
+
+                    start = ass_time_to_srt_time(row.get("start", "0:00:00.00"))
+                    end = ass_time_to_srt_time(row.get("end", "0:00:00.00"))
+                    speaker = row.get("name", "").strip()
+                    text = row.get("text", "")
+
+                    # 去除 ASS 特效代码 (如 {\an8}, {\pos(100,200)} 等)
+                    text = re.sub(r"\{.*?\}", "", text)
+                    # 处理 ASS 换行符与硬空格
+                    text = (
+                        text.replace(r"\N", "\n")
+                        .replace(r"\n", "\n")
+                        .replace(r"\h", " ")
+                    )
+                    text = text.strip()
+
+                    # 如果启用了 get_speaker 且有说话人名字，拼接到字幕前面
+                    if get_speaker and speaker:
+                        text = f"[{speaker}]{text}"
+
+                    if text:  # 忽略纯绘图或空白字幕
+                        events.append({"start": start, "end": end, "text": text})
+
+    # 2. 按照起始时间重新排序，确保时间轴单调递增
+    events.sort(key=lambda x: x["start"])
+
+    # 3. 输出为 SRT 格式文件
+    with open(dst_srt_file, "w", encoding="utf-8") as f:
+        for index, event in enumerate(events, 1):
+            f.write(f"{index}\n")
+            f.write(f"{event['start']} --> {event['end']}\n")
+            f.write(f"{event['text']}\n\n")

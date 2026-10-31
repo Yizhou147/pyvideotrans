@@ -1,0 +1,40 @@
+
+
+def openwin():
+    from pathlib import Path
+    from videotrans.winform import get_cls
+    from videotrans.configure.config import tr,params,app_cfg
+    from videotrans.util.TestSrtTrans import TestSrtTrans
+    from videotrans.winform._helpers import make_feed_translator
+
+
+    winobj = get_cls(Path(__file__).stem)()
+
+    feed = make_feed_translator(winobj, "test")
+
+    def _fix_url(url):
+        if not url.startswith('http'):
+            return 'http://' + url
+        return url
+
+    def test():
+        params["deeplx_api"] = _fix_url(winobj.deeplx_api.text().strip())
+        params["deeplx_key"] = winobj.deeplx_key.text().strip()
+        params.save()
+        winobj.test.setText(tr("Testing..."))
+        from videotrans import translator
+        task = TestSrtTrans(parent=winobj, translator_type=translator.DEEPLX_INDEX)
+        task.uito.connect(feed)
+        task.start()
+
+    def save():
+        params["deeplx_api"] = _fix_url(winobj.deeplx_api.text().strip())
+        params["deeplx_key"] = winobj.deeplx_key.text().strip()
+        params.save()
+        winobj.close()
+
+    winobj.deeplx_api.setText(str(params.get("deeplx_api", '')))
+    winobj.deeplx_key.setText(str(params.get("deeplx_key", '')))
+    winobj.set_deeplx.clicked.connect(save)
+    winobj.test.clicked.connect(test)
+    return winobj

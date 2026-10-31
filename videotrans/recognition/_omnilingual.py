@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Union
 from videotrans.configure.config import  logger, settings,ROOT_DIR
-from videotrans.configure.contants import OMNILINGUAL_URL_MS, OMNILINGUAL_URL_HF
+from videotrans.configure.constants import OMNILINGUAL_URL_MS, OMNILINGUAL_URL_HF
 from videotrans.configure.excepts import SpeechToTextError
 from videotrans.recognition._base import BaseRecogn
 from videotrans.task.taskcfg import SrtItem
@@ -14,7 +14,7 @@ import soundfile as sf
 from videotrans.util.help_misc import is_connect_hf
 
 
-@dataclass
+@dataclass(repr=False)
 class OmnilingualRecogn(BaseRecogn):
     def __post_init__(self):
         super().__post_init__()

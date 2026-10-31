@@ -8,9 +8,8 @@ from pathlib import Path
 import json,time,os
 from concurrent.futures import ThreadPoolExecutor
 
-@dataclass
-class OmniVoice(BaseTTS):
-
+@dataclass(repr=False)
+class HiggsVoice(BaseTTS):
 
     def _download(self):
         from videotrans.util import help_down
@@ -22,6 +21,12 @@ class OmniVoice(BaseTTS):
                     f'{ROOT_DIR}/models/models--multimodalart--higgs-audio-v3-tts-4b-transformers',
                     callback=self._process_callback,
             )
+        help_down.check_and_down_hf(
+                    "bosonai--higgs-audio-v2-tokenizer",
+                    'bosonai/higgs-audio-v2-tokenizer',
+                    f'{ROOT_DIR}/models/models--bosonai--higgs-audio-v2-tokenizer',
+                    callback=self._process_callback,
+            )
 
         return True
         
@@ -29,7 +34,7 @@ class OmniVoice(BaseTTS):
         logs_file = f'{TEMP_DIR}/{self.uuid}/higgs-audio-v2-{time.time()}.log'
         queue_tts_file = f'{TEMP_DIR}/{self.uuid}/higgs-audio-v2-{time.time()}.json'
         Path(queue_tts_file).write_text(json.dumps(self.queue_tts),encoding='utf-8')
-        title="higgs-audio-v2-TTS dubbing..."
+        title="higgs-audio-TTS dubbing..."
         kwargs = {
             "queue_tts_file":queue_tts_file,
             "logs_file": logs_file,

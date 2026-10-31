@@ -259,12 +259,19 @@ class SpeakerAssignmentDialog(QDialog,DanspMixin):
             return
         try:
             self.srt_list_dict= get_subtitle_from_srt(self.target_sub)
-            # 1. 创建 QTableWidget（比 Model/View 快得多）
 
-            
-            # 2. 【极致性能配置】禁用所有非必要功能
-            self.table.setColumnCount(9)
-            self.table.setHorizontalHeaderLabels(["Sel", tr("Line"), tr('Speaker'), tr("Dubbing role"), '\u270D'+tr("Start Time")+'/s', '\u270D'+tr("End Time")+'/s', '\u23F5', '\u270D'+tr("Subtitle Text"),tr("SourceLang Text")])
+            self.table.setColumnCount(10)
+            self.table.setHorizontalHeaderLabels([
+                "Sel",
+                tr("Line"),
+                tr("Time Axis"),
+                tr('Speaker'),
+                tr("Dubbing role"),
+                '\u270D'+tr("Start Time")+'/s',
+                '\u270D'+tr("End Time")+'/s',
+                '\u23F5',
+                '\u270D'+tr("Subtitle Text"),
+                tr("SourceLang Text")])
             
             # 禁用所有视觉效果
             self.table.setAlternatingRowColors(False)
@@ -286,22 +293,24 @@ class SpeakerAssignmentDialog(QDialog,DanspMixin):
             # 列宽设置
             header = self.table.horizontalHeader()
             header.setSectionResizeMode(0, QHeaderView.Fixed)  # Sel
-            header.setSectionResizeMode(1, QHeaderView.Fixed)  # ID
-            header.setSectionResizeMode(2, QHeaderView.Fixed)  # Spk
-            header.setSectionResizeMode(3, QHeaderView.Fixed)  # Role
-            header.setSectionResizeMode(4, QHeaderView.Fixed)  # Time
-            header.setSectionResizeMode(5, QHeaderView.Fixed)  # Time
-            header.setSectionResizeMode(6, QHeaderView.Fixed)  # Play
-            header.setSectionResizeMode(7, QHeaderView.Stretch)  # Text
-            header.setSectionResizeMode(8, QHeaderView.Stretch)  # SourceText
+            header.setSectionResizeMode(1, QHeaderView.Fixed)  # line
+            header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Timex
+            header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # Spk
+            header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Role
+            header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Time
+            header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # Time
+            header.setSectionResizeMode(7, QHeaderView.Fixed)  # Play
+            header.setSectionResizeMode(8, QHeaderView.Stretch)  # Text
+            header.setSectionResizeMode(9, QHeaderView.Stretch)  # SourceText
             
-            self.table.setColumnWidth(0, 30)
-            self.table.setColumnWidth(1, 40)
-            self.table.setColumnWidth(2, 50)
-            self.table.setColumnWidth(3, 150)
-            self.table.setColumnWidth(4, 125)
-            self.table.setColumnWidth(5, 125)
-            self.table.setColumnWidth(6, 30)
+            self.table.setColumnWidth(0, 50)
+            self.table.setColumnWidth(1, 60)
+            self.table.setColumnWidth(2, 100)
+            self.table.setColumnWidth(3, 100)
+            self.table.setColumnWidth(4, 100)
+            self.table.setColumnWidth(5, 100)
+            self.table.setColumnWidth(6, 100)
+            self.table.setColumnWidth(7, 30)
 
             # 最小样式
             self.table.setStyleSheet(self.table_style_css)
@@ -371,32 +380,43 @@ class SpeakerAssignmentDialog(QDialog,DanspMixin):
             chk_item = QTableWidgetItem()
             chk_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
             chk_item.setCheckState(Qt.Unchecked)
+            chk_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row, 0, chk_item)
             
             # 第1列：ID（只读）
             id_item = QTableWidgetItem(str(data['line']))
             id_item.setFlags(Qt.ItemIsEnabled)
+            id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.table.setItem(row, 1, id_item)
-            
-            # 第2列：Speaker（只读）
+
+            id_item = QTableWidgetItem(f'{data["startraw"]}->{data["endraw"]} ({(data["end_time"]-data["start_time"])/1000.0}s)' )
+            id_item.setFlags(Qt.ItemIsEnabled)
+            id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table.setItem(row, 2, id_item)
+
+            # 第2列：Speaker 
             spk_item = QTableWidgetItem(data['spk'])
-            spk_item.setFlags(Qt.ItemIsEnabled)
-            self.table.setItem(row, 2, spk_item)
+            spk_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable)
+            spk_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table.setItem(row, 3, spk_item)
             
             # 第3列：Role（只读，显示用）
             role_item = QTableWidgetItem(app_cfg.onlyone_voice_role)
             role_item.setFlags(Qt.ItemIsEnabled)
             role_item.setForeground(QColor("#ff4d4d"))
-            self.table.setItem(row, 3, role_item)
+            role_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table.setItem(row, 4, role_item)
             
-            # 第4列：Time（只读）
+            # 第4列：Time
             time_item = QTableWidgetItem( str(data['start_time']/1000.0 ))
             time_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable)
-            self.table.setItem(row, 4, time_item)
+            time_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table.setItem(row, 5, time_item)
 
             time_item2 = QTableWidgetItem(str(data['end_time']/1000.0 ))
             time_item2.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable)
-            self.table.setItem(row, 5, time_item2)
+            time_item2.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.table.setItem(row, 6, time_item2)
 
             # 第5列：Play button
             btn = QPushButton("\u23F5")
@@ -405,16 +425,18 @@ class SpeakerAssignmentDialog(QDialog,DanspMixin):
             s = data['start_time']
             e = data['end_time']
             btn.clicked.connect(lambda checked=False, _s=s, _e=e: self._play_segment(_s, _e))
-            self.table.setCellWidget(row, 6, btn)
+            self.table.setCellWidget(row, 7, btn)
             
             # 第6列：Text（可编辑）
             text_item = QTableWidgetItem(data['text'])
             text_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsEditable | Qt.ItemIsSelectable)
-            self.table.setItem(row, 7, text_item)
+            text_item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter)
+            self.table.setItem(row, 8, text_item)
             
             origin_text_item = QTableWidgetItem(data['origin_text'])
             origin_text_item.setFlags(Qt.ItemIsEnabled)
-            self.table.setItem(row, 8, origin_text_item)
+            origin_text_item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter)
+            self.table.setItem(row, 9, origin_text_item)
 
     def _load_remaining_rows(self, start_row):
         """延迟加载剩余行 - 避免界面冻结"""
@@ -477,7 +499,7 @@ class SpeakerAssignmentDialog(QDialog,DanspMixin):
         for i, spk_id in enumerate(self.speakers):
             row = i // 4
             col = i % 4
-            check = QCheckBox(f'{tr("Speaker")}{spk_id}')
+            check = QCheckBox(f'{tr("Speaker")}: {spk_id}')
             check.setStyleSheet("color: #dddddd;")
             
             label = QLabel("")
@@ -536,7 +558,7 @@ class SpeakerAssignmentDialog(QDialog,DanspMixin):
             if not role and data['spk']:
                 role = self.speakers.get(data['spk'], '')
             
-            item = self.table.item(row, 3)
+            item = self.table.item(row, 4)
             if not item:
                 continue
             item.setText(app_cfg.onlyone_voice_role if role in ['No','',None] else role)
@@ -568,7 +590,7 @@ class SpeakerAssignmentDialog(QDialog,DanspMixin):
             if search_text in data['text']:
                 new_text = data['text'].replace(search_text, replace_text)
                 data['text'] = new_text
-                item = self.table.item(row, 6)
+                item = self.table.item(row, 8)
                 if item:
                     item.setText(new_text)
         
@@ -627,7 +649,7 @@ class SpeakerAssignmentDialog(QDialog,DanspMixin):
 
 
     def _on_video_position_changed(self, position):
-        if self._target_end_ms > 0 and position >= self._target_end_ms:
+        if 0 < self._target_end_ms <= position:
             self._pause_play()
 
 
@@ -762,20 +784,23 @@ class SpeakerAssignmentDialog(QDialog,DanspMixin):
 
         for row, data in enumerate(self.display_data):
             # 获取当前文本（从表格中获取最新值）
-            start_time = self.table.item(row, 4)
-            end_time = self.table.item(row, 5)
+            start_time = self.table.item(row, 5)
+            if not start_time:continue
+            end_time = self.table.item(row, 6)
             start_raw=ms_to_time_string(ms=int(float(start_time.text().strip())*1000))
             end_raw=ms_to_time_string(ms=int(float(end_time.text().strip())*1000))
 
-            text_item = self.table.item(row, 7)
+            text_item = self.table.item(row, 8)
             text = text_item.text().strip() if text_item else data['text'].strip()
-            
+            if not text:continue
+
             srt_str_list.append(f'{len(srt_str_list)+1}\n{start_raw} --> {end_raw}\n{text}')
 
             # 角色保存逻辑
             role = data.get('role', '')
-            if not role and self.speakers and data['spk']:
-                role = self.speakers.get(data['spk'], '')
+            spk= self.table.item(row, 3).text().strip() or data['spk']
+            if not role and self.speakers and spk:
+                role = self.speakers.get(spk, '')
 
             if role:
                 app_cfg.line_roles[str(data["line"])] = role

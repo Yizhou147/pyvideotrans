@@ -11,7 +11,7 @@ from videotrans.util.help_misc import vail_file
 from videotrans.util.help_role import get_azure_rolelist
 
 
-@dataclass
+@dataclass(repr=False)
 class AzureTTS(BaseTTS):
 
     @retry(retry=retry_if_not_exception_type(NO_RETRY_EXCEPT), stop=(stop_after_attempt(settings.get('retry_nums'))), wait=wait_fixed(2), before=before_log(logger, logging.INFO), after=after_log(logger, logging.INFO))
@@ -20,8 +20,8 @@ class AzureTTS(BaseTTS):
         try:
             filename = data_item['filename'] + f"-generate.wav"
             speech_config = speechsdk.SpeechConfig(
-                subscription=params.get('azure_speech_key',''),
-                region=params.get('azure_speech_region','')
+                subscription=params.get('azuretts_key',''),
+                region=params.get('azuretts_region','')
             )
             speech_config.set_speech_synthesis_output_format(
                 speechsdk.SpeechSynthesisOutputFormat.Riff48Khz16BitMonoPcm)

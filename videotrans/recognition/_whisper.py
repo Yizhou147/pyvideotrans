@@ -9,15 +9,15 @@ from videotrans.configure import config
 from videotrans.recognition._base import BaseRecogn
 from videotrans.task.taskcfg import SrtItem
 
-from videotrans.util.help_down import check_and_down_hf
+from videotrans.util.help_down import check_and_down_hf,down_file_from_hf
 from videotrans.util.help_srt import get_subtitle_from_srt
 from pydub import AudioSegment
 
 
-from videotrans.configure.contants import FASTER_MODELS_DICT
+from videotrans.configure.constants import FASTER_MODELS_DICT
 from videotrans.configure.excepts import SttTimeoutError
 
-@dataclass
+@dataclass(repr=False)
 class FasterAll(BaseRecogn):
     def __post_init__(self):
         super().__post_init__()
@@ -27,18 +27,16 @@ class FasterAll(BaseRecogn):
         else:
             local_dir += self.model_name.replace('/', '--')
         self.local_dir = local_dir
-        self.audio_duration=len(AudioSegment.from_wav(self.audio_file))
-        self.speech_timestamps_file=None
-
 
     def _exec(self)->Union[List[SrtItem], None]:
         if self._exit(): return
         self.error = ''
         self.signal(text="STT starting, hold on...")
+        audio_duration=len(AudioSegment.from_wav(self.audio_file))
         if self.recogn_type == 1:  # openai-whisper
-            raws = self._openai()
+            raws = self._openai(audio_duration)
         else:
-            raws = self._faster()
+            raws = self._faster(audio_duration)
         return raws
 
     def _download(self):
@@ -48,58 +46,57 @@ class FasterAll(BaseRecogn):
             else:
                 repo_id = self.model_name
             check_and_down_hf(self.model_name,repo_id,self.local_dir,callback=self._process_callback)
-        # 批量时预先vad切分
-        # 否则后断句处理
+        elif self.recogn_type==1 and not Path(f'{ROOT_DIR}/models/{self.model_name}.pt').exists():
+            import whisper            
+            down_file_from_hf(f'{ROOT_DIR}/models',[whisper._MODELS[self.model_name]],callback=self._process_callback)
+            
 
-        if settings.get('whisper_prepare'):
-
-            self._vad_split()
-            self.speech_timestamps_file=f'{self.cache_folder}/speech_timestamps_{time.time()}.json'
-            Path(self.speech_timestamps_file).write_text(json.dumps(self.speech_timestamps),encoding='utf-8')
-
-
-    def _openai(self)->Union[List[SrtItem], None]:
+    def _openai(self,audio_duration)->Union[List[SrtItem], None]:
         title=f'Model: {self.model_name}'
         self.signal(text=title)
         # 起一个进程
         logs_file = f'{config.TEMP_DIR}/{self.uuid}/openai-{self.detect_language}-{time.time()}.log'
-        # 最长持续时长>2000ms
-        _max_speech=max(int(float(settings.get('max_speech_duration_s', 5)) * 1000),2000)
-        if self.recogn2pass:
-            # 2次识别， 生成简短的字幕,  最长持续时长>500ms
-            _max_speech = max(int(float(settings.get('max_speech_duration_s2', 2)) * 1000),500)
+
+        _min_speech = max(int(float(settings.get('min_speech_duration_ms', 1000))), 200)
+        # 最长片段不得大于25s,并且不得小于 _min_speech
+        _max_speech = min(int(float(settings.get('max_speech_duration_s', 6)) * 1000), 25000)
+        if _max_speech<=_min_speech:
+            _max_speech=_min_speech+1000
+
         kwargs = {
-            "prompt": settings.get(
-                f'initial_prompt_{self.detect_language}') if self.detect_language != 'auto' else None,
+            "prompt": settings.get(f'initial_prompt_{self.detect_language.replace("-","_")}'),
             "detect_language": self.detect_language,
             "model_name": self.model_name,
             "logs_file": logs_file,
             "is_cuda": self.is_cuda,
             "no_speech_threshold": float(settings.get('no_speech_threshold', 0.6)),
             "condition_on_previous_text": settings.get('condition_on_previous_text', False),
-            "speech_timestamps": self.speech_timestamps_file,
             "audio_file": self.audio_file,
             "jianfan": self.jianfan,
+            "uuid":self.uuid,
             
-            "audio_duration":self.audio_duration,
+            "audio_duration":audio_duration,
             "temperature":settings.get('temperature'),
             "compression_ratio_threshold":float(settings.get('compression_ratio_threshold',2.4)),
-            "max_speech_ms":_max_speech
+            "max_speech_ms":_max_speech,
+            "min_speech_ms":_min_speech
         }
         from videotrans.process.stt_openai import openai_whisper
         raws=self._new_process(callback=openai_whisper,title=title,is_cuda=self.is_cuda,kwargs=kwargs)
         return raws
 
 
-    def _faster(self)->Union[List[SrtItem], None]:
+    def _faster(self,audio_duration)->Union[List[SrtItem], None]:
         title=f"Model: {self.model_name}"
         self.signal(text=title)
         logs_file = f'{config.TEMP_DIR}/{self.uuid}/faster-{self.detect_language}-{time.time()}.log'
-        _max_speech=max(int(float(settings.get('max_speech_duration_s', 5)) * 1000),2000)
-        if self.recogn2pass:
-            # 2次识别， 生成简短的字幕
-            _max_speech = max(int(float(settings.get('max_speech_duration_s2', 2)) * 1000),500)
-        
+
+        _min_speech = max(int(float(settings.get('min_speech_duration_ms', 1000))), 200)
+        # 最长片段不得大于25s,并且不得小于 _min_speech
+        _max_speech = min(int(float(settings.get('max_speech_duration_s', 6)) * 1000), 25000)
+        if _max_speech<=_min_speech:
+            _max_speech=_min_speech+1000
+
         
         subtitle_srt=f'{TEMP_ROOT}/faster-{datetime.datetime.now().strftime("%Y%m%d-%H_%M_%S")}.srt'
         kwargs = {
@@ -108,23 +105,32 @@ class FasterAll(BaseRecogn):
             "logs_file": logs_file,
             "is_cuda": self.is_cuda,
             "no_speech_threshold": float(settings.get('no_speech_threshold', 0.6)),
+            "threshold":float(settings.get('threshold', 0.45)),
             "condition_on_previous_text": settings.get('condition_on_previous_text', False),
-            "speech_timestamps": self.speech_timestamps_file,
             "audio_file": self.audio_file,
             "local_dir": self.local_dir,
             "compute_type": settings.get('cuda_com_type', 'int8'),
             "jianfan": self.jianfan,
-            "audio_duration":self.audio_duration,
+            "audio_duration":audio_duration,
             "hotwords":settings.get('hotwords'),
-            "prompt": settings.get(f'initial_prompt_{self.detect_language}') if self.detect_language != 'auto' else None,
+            "prompt": settings.get(f'initial_prompt_{self.detect_language.replace("-","_")}'),
             "beam_size": int(settings.get('beam_size', 5)),
             "best_of": int(settings.get('best_of', 5)),
             "temperature":settings.get('temperature'),
             "repetition_penalty":float(settings.get('repetition_penalty',1.0)),
             "compression_ratio_threshold":float(settings.get('compression_ratio_threshold',2.2)),
             "max_speech_ms":_max_speech,
+            "min_speech_ms":_min_speech,
+            "min_silence_duration_ms":max(int(settings.get('min_silence_duration_ms', 600)), 100),
+            "uuid":self.uuid,
             "subtitle_srt":subtitle_srt
         }
+        if self.recogn2pass:
+            # 2次识别， 生成简短的字幕
+            kwargs['recogn2_max_speech'] = max(int(float(settings.get('max_speech_duration_s2', 1)) * 1000),500)
+            kwargs['recogn2_min_speech'] = max(int(float(settings.get('min_speech_duration_ms2',200))),200)
+            if kwargs['recogn2_min_speech']>=kwargs['recogn2_max_speech']:
+                kwargs['recogn2_max_speech']+=200
         try:
             from videotrans.process.stt_faster import  faster_whisper
             raws=self._new_process(callback=faster_whisper,title=title,is_cuda=self.is_cuda,kwargs=kwargs)

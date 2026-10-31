@@ -10,9 +10,26 @@ from pathlib import Path
 from videotrans.configure.config import ROOT_DIR, tr, app_cfg, settings, logger
 
 
-def extract_concise_error(stderr_text: str) -> str:
+# Tokens that let a crafted `ffmpeg_cmd` setting introduce a new input/output
+# source (e.g. "-i http://attacker/path") instead of just tuning an existing
+# encode. Blocking these closes the SSRF path while still allowing the
+# field's intended use: encoder-tuning flags like "-bf 7 -b_ref_mode middle".
+_FFMPEG_CMD_FORBIDDEN_FLAGS = {"-i"}
+
+
+def _reject_unsafe_ffmpeg_cmd(custom_params):
+    for token in custom_params:
+        if token in _FFMPEG_CMD_FORBIDDEN_FLAGS or "://" in token:
+            raise ValueError(
+                f"自定义ffmpeg命令参数包含不允许的内容: {token!r}。"
+                " 该字段不能用于指定新的输入/输出源或网络协议 (Custom ffmpeg command"
+                " arguments may not introduce a new input/output source or network protocol)."
+            )
+
+
+def extract_concise_error(stderr_text: str,stdout:str="") -> str:
     if not stderr_text:
-        return "Unknown error (empty stderr)"
+        return f"Unknown error (empty stderr) {stdout}"
 
     lines = stderr_text.strip().splitlines()
     if not lines:
@@ -30,7 +47,7 @@ def runffmpeg(arg, *, noextname=None, force_cpu=True, cmd_dir=None):
 
     final_args = arg
 
-    cmd = ['ffmpeg', "-hide_banner", "-nostdin", "-ignore_unknown", '-threads', '0']
+    cmd = ['ffmpeg', "-hide_banner", "-nostdin", "-ignore_unknown"]
     if "-y" not in final_args:
         cmd.append("-y")
     cmd.extend(final_args)
@@ -40,9 +57,9 @@ def runffmpeg(arg, *, noextname=None, force_cpu=True, cmd_dir=None):
 
     if settings.get('ffmpeg_cmd'):
         custom_params = [p for p in settings.get('ffmpeg_cmd', '').split(' ') if p]
+        _reject_unsafe_ffmpeg_cmd(custom_params)
         cmd = cmd[:-1] + custom_params + cmd[-1:]
-    #if cmd[-1].endswith('.mp4'):
-    #    logger.debug(f'runffmpeg:{cmd=}')
+
     try:
         if app_cfg.exit_soft:
             return
@@ -68,7 +85,7 @@ def runffmpeg(arg, *, noextname=None, force_cpu=True, cmd_dir=None):
     except subprocess.CalledProcessError as e:
         error_message = e.stderr or ""
         logger.error(f"FFmpeg 命令执行失败 (force_cpu={force_cpu})。\n命令: {' '.join(cmd)}\n错误: {error_message} {e.stdout}")
-        err = extract_concise_error(e.stderr)
+        err = extract_concise_error(e.stderr,e.stdout)
         if noextname:
             app_cfg.queue_novice[noextname] = f"error:{err}"
         if sys.platform == 'win32' and 'No such file or directory' in str(e):

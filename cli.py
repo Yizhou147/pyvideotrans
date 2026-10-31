@@ -23,7 +23,9 @@ import argparse
 from dataclasses import asdict
 from multiprocessing import freeze_support
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict,  Optional
+
+import torch.cuda
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -195,7 +197,6 @@ def tr(key: str, *args) -> str:
 # ---------------------------------------------------------------------------
 def stt_fun(params: dict) -> None:
     """Execute speech-to-text task."""
-    from videotrans.configure.config import app_cfg
     from videotrans.task.speech2text import SpeechToText
     from videotrans.task.taskcfg import TaskCfgSTT
 
@@ -307,7 +308,7 @@ def list_languages() -> None:
 
 def list_models() -> None:
     """Print available faster-whisper models."""
-    from videotrans.configure.contants import FASTER_MODELS_DICT
+    from videotrans.configure.constants import FASTER_MODELS_DICT
 
     print(tr('list_models_header'))
     for name, repo in FASTER_MODELS_DICT.items():
@@ -349,7 +350,7 @@ def build_parser() -> argparse.ArgumentParser:
     stt_group.add_argument('--cuda', action='store_true', help=tr("help_cuda"))
     stt_group.add_argument('--remove_noise', action='store_true', help=tr("help_remove_noise"))
     stt_group.add_argument('--enable_diariz', action='store_true', help=tr("help_enable_diariz"))
-    stt_group.add_argument('--nums_diariz', type=int, default=-1, help=tr("help_nums_diariz"))
+    stt_group.add_argument('--nums_diariz', type=int, default=0, help=tr("help_nums_diariz"))
     stt_group.add_argument('--rephrase', type=int, default=0, help=tr("help_rephrase"))
     stt_group.add_argument('--fix_punc', action='store_true', help=tr("help_fix_punc"))
 
@@ -415,7 +416,6 @@ def build_common_params(args: argparse.Namespace, output_dir: Optional[str] = No
     """Build common parameters dict from parsed args."""
     from videotrans.configure.config import ROOT_DIR, TEMP_DIR
     from videotrans.util import tools
-    from videotrans.util.gpus import getset_gpu
 
     _file_obj = tools.format_video(Path(args.name).absolute().as_posix())
     _nospacebasename = re.sub(r'[\s. #*?!:"]', '-', _file_obj["basename"])
@@ -441,9 +441,9 @@ def build_stt_params(args: argparse.Namespace) -> dict:
     """Build STT-specific parameters."""
     return {
         "recogn_type": args.recogn_type,
-        "detect_language": args.detect_language,
+        "detect_language": args.source_language_code or args.detect_language,
         "model_name": args.model_name,
-        "is_cuda": args.cuda,
+        "is_cuda": args.cuda if args.cuda and torch.cuda.is_available() else False,
         "remove_noise": args.remove_noise,
         "enable_diariz": args.enable_diariz,
         "nums_diariz": args.nums_diariz,
@@ -460,7 +460,7 @@ def build_tts_params(args: argparse.Namespace) -> dict:
         "voice_rate": args.voice_rate,
         "volume": args.volume,
         "pitch": args.pitch,
-        "is_cuda": args.cuda,
+        "is_cuda": args.cuda if args.cuda and torch.cuda.is_available() else False,
         "voice_autorate": args.voice_autorate,
         "align_sub_audio": args.align_sub_audio,
         "target_language_code": args.target_language_code,
@@ -484,7 +484,7 @@ def build_vtv_params(args: argparse.Namespace) -> dict:
         **build_stt_params(args),
         **{k: v for k, v in build_tts_params(args).items()
            if k not in ('target_language_code', 'is_cuda')},
-        "is_cuda": args.cuda,
+        "is_cuda": args.cuda if args.cuda and torch.cuda.is_available() else False,
         "translate_type": args.translate_type,
         "is_separate": args.is_separate,
         "recogn2pass": args.recogn2pass,

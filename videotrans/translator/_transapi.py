@@ -10,23 +10,23 @@ from videotrans.translator._base import BaseTrans
 
 
 
-@dataclass
+@dataclass(repr=False)
 class TransAPI(BaseTrans):
 
     def __post_init__(self):
         super().__post_init__()
-        url = params.get('trans_api_url','').strip().rstrip('/').lower()
+        url = params.get('transapi_url','').strip().rstrip('/')
         if len(url)<4:
             raise StopTask(f'API URL is error: {url}')
-        if not url.startswith('http'):
+        if not url.lower().startswith('http'):
             url = f"http://{url}"
         self.api_url = url + ('&' if '?' in url else '/?')
 
     @retry(retry=retry_if_not_exception_type(NO_RETRY_EXCEPT), stop=(stop_after_attempt(settings.get('retry_nums'))), wait=wait_fixed(2), before=before_log(logger, logging.INFO),after=after_log(logger, logging.INFO))
-    def _item_task(self, data: Union[List[str], str]) -> str:
+    def _item_task(self, data: str) -> str:
         if self._exit(): return
-        text = quote("\n".join(data))
-        requrl = f"{self.api_url}target_language={self.target_code}&source_language={self.source_code.split('-')[0] if self.source_code else ''}&text={text}&secret={params.get('trans_secret','')}"
+        text = quote(data)
+        requrl = f"{self.api_url}target_language={self.target_code}&source_language={self.source_code.split('-')[0] if self.source_code else ''}&text={text}&secret={params.get('transapi_key','')}"
 
         response = requests.get(url=requrl,verify=False)
         logger.debug(f'[TransAPI]返回:{response=}')

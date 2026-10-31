@@ -11,12 +11,12 @@ from videotrans.translator._base import BaseTrans
 from videotrans.util._srt_parse import cleartext
 
 
-@dataclass
+@dataclass(repr=False)
 class Libre(BaseTrans):
     def __post_init__(self):
         super().__post_init__()
 
-        url = params.get('libre_address','').strip().rstrip('/')
+        url = params.get('libre_api','').strip().rstrip('/')
         if len(url)<4:
             raise StopTask(f'API URL is error: {url}')
         key = params.get('libre_key','').strip()  # Retained for logical equivalence
@@ -32,13 +32,13 @@ class Libre(BaseTrans):
                 self.api_url += f"?key={key}"
 
     @retry(retry=retry_if_not_exception_type(NO_RETRY_EXCEPT), stop=(stop_after_attempt(settings.get('retry_nums'))), wait=wait_fixed(2), before=before_log(logger, logging.INFO),after=after_log(logger, logging.INFO))
-    def _item_task(self, data: Union[List[str], str]) -> str:
+    def _item_task(self, data: str) -> str:
         if self._exit(): return
         jsondata = {
-            "q": "\n".join(data),
+            "q": data,
             "source": 'auto',
             "api_key": params.get('libre_key', ''),
-            "target": self.target_code.split('-')[0]
+            "target": self.target_code
         }
         try:
             response = requests.post(url=self.api_url, json=jsondata)
@@ -48,4 +48,4 @@ class Libre(BaseTrans):
         result = response.json()
         result = cleartext(result['translatedText'])
 
-        return result.lower() if self.target_code.split('-')[0] == 'en' else result
+        return result.lower() if self.target_code == 'en' else result

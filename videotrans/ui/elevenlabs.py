@@ -3,26 +3,25 @@
 
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QDialog
 
-from videotrans.configure.config import tr
-from videotrans.configure.contants import ELEVENLABS_TTS_MODELS
+from videotrans.configure.config import tr,ROOT_DIR
+from videotrans.configure.constants import ELEVENLABS_TTS_MODELS
 from videotrans.util.help_misc import open_url
 
 
-class Ui_elevenlabsform(object):
-    def setupUi(self, elevenlabsform):
+class Ui_elevenlabs(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowIcon(QIcon(f"{ROOT_DIR}/videotrans/styles/icon.ico"))
+        self.setupUi(self)
+    def setupUi(self, form):
         self.has_done = False
-        elevenlabsform.setObjectName("elevenlabsform")
-        elevenlabsform.setWindowModality(QtCore.Qt.NonModal)
-        elevenlabsform.resize(400, 223)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(elevenlabsform.sizePolicy().hasHeightForWidth())
-        elevenlabsform.setSizePolicy(sizePolicy)
-        elevenlabsform.setMaximumSize(QtCore.QSize(400, 300))
+        form.setObjectName("form")
+        form.resize(400, 223)
 
-        self.verticalLayout = QtWidgets.QVBoxLayout(elevenlabsform)
+        self.verticalLayout = QtWidgets.QVBoxLayout(form)
         self.verticalLayout.setObjectName("verticalLayout")
 
         self.formLayout_2 = QtWidgets.QHBoxLayout()
@@ -43,13 +42,13 @@ class Ui_elevenlabsform(object):
         self.label2.setMinimumSize(QtCore.QSize(100, 35))
         self.label2.setObjectName("label2")
 
-        self.elevenlabstts_models = QtWidgets.QComboBox()
-        self.elevenlabstts_models.setMinimumSize(QtCore.QSize(210, 35))
-        self.elevenlabstts_models.setObjectName("elevenlabstts_models")
-        self.elevenlabstts_models.addItems(ELEVENLABS_TTS_MODELS.split(','))
+        self.elevenlabstts_model = QtWidgets.QComboBox()
+        self.elevenlabstts_model.setMinimumSize(QtCore.QSize(210, 35))
+        self.elevenlabstts_model.setObjectName("elevenlabstts_model")
+        self.elevenlabstts_model.addItems(ELEVENLABS_TTS_MODELS.split(','))
 
         self.formLayout_3.addWidget(self.label2)
-        self.formLayout_3.addWidget(self.elevenlabstts_models)
+        self.formLayout_3.addWidget(self.elevenlabstts_model)
 
         self.verticalLayout.addLayout(self.formLayout_2)
         self.verticalLayout.addLayout(self.formLayout_3)
@@ -62,6 +61,11 @@ class Ui_elevenlabsform(object):
         self.test.setMinimumSize(QtCore.QSize(0, 35))
         self.test.setObjectName("test")
 
+        self.update_btn = QtWidgets.QPushButton()
+        self.update_btn.setMinimumSize(QtCore.QSize(0, 35))
+        self.update_btn.setObjectName("update_btn")
+        self.update_btn.setText(tr("Test & update role"))
+
         help_btn = QtWidgets.QPushButton()
         help_btn.setMinimumSize(QtCore.QSize(0, 35))
         help_btn.setStyleSheet("background-color: rgba(255, 255, 255,0)")
@@ -73,16 +77,17 @@ class Ui_elevenlabsform(object):
         hv = QtWidgets.QHBoxLayout()
         hv.addWidget(self.set)
         hv.addWidget(self.test)
+        hv.addWidget(self.update_btn)
         hv.addWidget(help_btn)
 
         self.verticalLayout.addLayout(hv)
 
-        self.retranslateUi(elevenlabsform)
-        QtCore.QMetaObject.connectSlotsByName(elevenlabsform)
+        self.retranslateUi(form)
+        QtCore.QMetaObject.connectSlotsByName(form)
 
-    def retranslateUi(self, elevenlabsform):
-        elevenlabsform.setWindowTitle("ElevenLabs.io")
+    def retranslateUi(self, form):
+        form.setWindowTitle("ElevenLabs.io")
         self.label2.setText("TTS model")
         self.label.setText("API_KEY")
         self.set.setText(tr("Save"))
-        self.test.setText(tr("Test & get roles"))
+        self.test.setText(tr("Test"))

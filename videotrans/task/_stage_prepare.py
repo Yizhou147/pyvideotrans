@@ -2,7 +2,6 @@ import time,re,json,shutil
 from pathlib import Path
 
 from videotrans.configure.config import tr, app_cfg, settings, logger
-from videotrans.configure.contants import UVR_URL_MS, UVR_URL_HF
 from videotrans.configure.excepts import VideoTransError
 from videotrans.task.simple_runnable_qt import run_in_threadpool
 from videotrans.util.help_ffmpeg import get_video_info, runffmpeg
@@ -21,6 +20,7 @@ class PrepareMixin:
         self._unlink_size0([self.cfg.source_sub, self.cfg.target_sub, self.cfg.targetdir_mp4])
         self.video_info = get_video_info(self.cfg.name)
         self.video_time = self.video_info['time']
+        logger.debug(f'原始输入文件信息:{self.video_info=}')
         audio_stream_len = self.video_info.get('streams_audio', 0)
 
         if self.video_info.get('video_streams', 0) < 1 and not self.is_audio_trans and self.cfg.app_mode != 'tiqu':
@@ -92,18 +92,25 @@ class PrepareMixin:
                 source_srt_list = get_subtitle_from_srt(self.cfg.source_sub, is_file=True)
                 if source_srt_list:
                     spk_list=[]
+                    edge_line=len(source_srt_list)/3
+                    no_speak_line=0
                     for i,it in enumerate(source_srt_list):
-                        groups=re.search(r'^\[\s*?(sp[a-zA-Z]+\s*?\d+)\s*?\]',it['text'].strip(),flags=re.I)
+                        # 无说话人的行多于 1/3 时，停止提取说话人
+                        if no_speak_line>=edge_line:
+                            spk_list=[]
+                            break
+                        groups=re.search(r'^\[(.*?)\]',it['text'].strip(),flags=re.I)
                         if not groups:
-                            if i==0:
-                                break
+                            if i==0: break
+                            no_speak_line+=1
                             if i>0 and spk_list:
                                 spk_list.append(spk_list[0])
                         else:
                             spk_list.append(groups.group(1))
                             # 从字幕中删掉说话人标识
-                            it['text']=it['text'].replace(groups.group(0),'')
-                    if spk_list:                            
+                            p=rf"^\[{groups.group(1)}\]"
+                            it['text']=re.sub(p,'',it['text'])
+                    if spk_list:
                         Path(self.cfg.target_dir + "/speaker.json").write_text(json.dumps(spk_list), encoding='utf-8')
                         txt = get_srt_from_list(source_srt_list)
                         with open(self.cfg.source_sub, "w", encoding="utf-8", errors="ignore") as f:
@@ -201,23 +208,9 @@ class PrepareMixin:
 
         if vail_file(self.cfg.vocal) and vail_file(self.cfg.instrument):
             return
-        from videotrans.configure.config import ROOT_DIR
-        from videotrans.util.help_down import down_file_from_hf
-        from videotrans.util.help_misc import is_connect_hf
+
         title = tr('Separating vocals and background music, which may take a longer time')
         uvr_models = settings.get('uvr_models')
-        URL_PREFIX= UVR_URL_MS if not is_connect_hf() else UVR_URL_HF
-        
-        if uvr_models.startswith('spleeter'):
-            down_file_from_hf(f'{ROOT_DIR}/models/onnx', [
-                URL_PREFIX.replace('{}','vocals.fp16.onnx'),
-                URL_PREFIX.replace('{}','accompaniment.fp16.onnx')
-            ], callback=self._process_callback)
-
-        else:
-            down_file_from_hf(f'{ROOT_DIR}/models/onnx', [
-                URL_PREFIX.replace('{}',f'{uvr_models}.onnx')
-            ], callback=self._process_callback)
         from videotrans.process.prepare_audio import vocal_bgm
         kw = {"input_file": tmpfile, "vocal_file": self.cfg.vocal, "instr_file": self.cfg.instrument,
               "uvr_models": uvr_models}
@@ -243,3 +236,4 @@ class PrepareMixin:
                 shutil.copy2(self.cfg.instrument, f'{self.cfg.target_dir}/instrument.wav')
         except Exception as e:
             logger.exception(f'人声背景声分离失败，静默跳过 {e}', exc_info=True)
+

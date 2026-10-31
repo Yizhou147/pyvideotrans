@@ -38,28 +38,24 @@ def _init_pythonnet():
 
     return _clr
 
-
-@dataclass
+_CFG={
+    "_dll_dir_handles":[]
+}
+@dataclass(repr=False)
 class WhisperNetRecogn(BaseRecogn):
-    # 类级别的DLL目录句柄
-    _dll_dir_handles: list = None
 
-    def __post_init__(self):
-        super().__post_init__()
-        self.whisper_factory = None
-        if WhisperNetRecogn._dll_dir_handles is None:
-            WhisperNetRecogn._dll_dir_handles = []
-
-    def _add_dll_search_dir(self, path: str) -> None:
+    @staticmethod
+    def _add_dll_search_dir(path: str) -> None:
         """添加DLL搜索目录"""
         if not os.path.isdir(path):
             return
         os.environ["PATH"] = path + os.pathsep + os.environ.get("PATH", "")
         if hasattr(os, "add_dll_directory"):
             handle = os.add_dll_directory(path)
-            WhisperNetRecogn._dll_dir_handles.append(handle)
+            _CFG['_dll_dir_handles'].append(handle)
 
-    def _preload_native_library(self, native_dir: str) -> None:
+    @staticmethod
+    def _preload_native_library(native_dir: str) -> None:
         """预加载native库"""
         if not sys.platform.startswith("win"):
             return
@@ -210,7 +206,7 @@ class WhisperNetRecogn(BaseRecogn):
                 builder = builder.WithLanguageDetection()
 
             # 设置其他参数
-            if settings.get('condition_on_previous_text', False):
+            if not settings.get('condition_on_previous_text', False):
                 builder = builder.WithNoContext()
             builder = builder.WithNoSpeechThreshold(float(settings.get('no_speech_threshold', -0.8)))
             builder = builder.WithLogProbThreshold(float(settings.get('logprob_threshold', -1.0)))

@@ -11,12 +11,12 @@ from videotrans.translator._base import BaseTrans
 from videotrans.util._srt_parse import cleartext
 
 
-@dataclass
+@dataclass(repr=False)
 class DeepLX(BaseTrans):
 
     def __post_init__(self):
         super().__post_init__()
-        url = params.get('deeplx_address','').strip().rstrip('/')
+        url = params.get('deeplx_api','').strip().rstrip('/')
         if len(url)<4:
             raise StopTask(f'API URL is error: {url}')
         key = params.get('deeplx_key','').strip()
@@ -33,7 +33,7 @@ class DeepLX(BaseTrans):
 
 
     @retry(retry=retry_if_not_exception_type(NO_RETRY_EXCEPT), stop=(stop_after_attempt(settings.get('retry_nums'))), wait=wait_fixed(2), before=before_log(logger, logging.INFO),after=after_log(logger, logging.INFO))
-    def _item_task(self, data: Union[List[str], str]) -> str:
+    def _item_task(self, data: str) -> str:
         if self._exit(): return
         target_code = self.target_code.upper()
         if target_code == 'EN':
@@ -44,10 +44,10 @@ class DeepLX(BaseTrans):
             target_code = 'ZH-HANT'
         elif target_code == 'PT':
             target_code = 'PT-PT'
-        sourcecode = self.source_code.split('-')[0].upper() if self.source_code else None
-        sourcecode = sourcecode if sourcecode != 'AUTO' else None
+        sourcecode = self.source_code.upper() if self.source_code else None
+        sourcecode = sourcecode.split('-')[0] if sourcecode else None
         jsondata = {
-            "text": "\n".join(data),
+            "text": data,
             "source_lang": sourcecode,
             "target_lang": target_code
         }

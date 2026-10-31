@@ -3,25 +3,24 @@
 
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QDialog
 
-from videotrans.configure.config import tr, settings, params
+from videotrans.configure.config import tr, settings, params, ROOT_DIR
 from videotrans.util.help_misc import open_url
 
 
-class Ui_deepseekform(object):
-    def setupUi(self, deepseekform):
+class Ui_deepseek(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowIcon(QIcon(f"{ROOT_DIR}/videotrans/styles/icon.ico"))
+        self.setupUi(self)
+    def setupUi(self, form):
         self.has_done = False
-        deepseekform.setObjectName("deepseekform")
-        deepseekform.setWindowModality(QtCore.Qt.NonModal)
-        deepseekform.resize(600, 600)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(deepseekform.sizePolicy().hasHeightForWidth())
-        deepseekform.setSizePolicy(sizePolicy)
-        deepseekform.setMaximumSize(QtCore.QSize(600, 600))
+        form.setObjectName("form")
+        form.resize(600, 600)
 
-        v1 = QtWidgets.QVBoxLayout(deepseekform)
+        v1 = QtWidgets.QVBoxLayout(form)
         h2 = QtWidgets.QHBoxLayout()
 
         h4 = QtWidgets.QHBoxLayout()
@@ -33,11 +32,11 @@ class Ui_deepseekform(object):
             'DeepSeek AI')
         v1.addWidget(self.label_0)
 
-        self.label_2 = QtWidgets.QLabel(deepseekform)
+        self.label_2 = QtWidgets.QLabel()
         self.label_2.setMinimumSize(QtCore.QSize(0, 35))
         self.label_2.setSizeIncrement(QtCore.QSize(0, 35))
         self.label_2.setObjectName("label_2")
-        self.deepseek_key = QtWidgets.QLineEdit(deepseekform)
+        self.deepseek_key = QtWidgets.QLineEdit()
         self.deepseek_key.setMinimumSize(QtCore.QSize(0, 35))
         self.deepseek_key.setObjectName("deepseek_key")
         h2.addWidget(self.label_2)
@@ -48,7 +47,7 @@ class Ui_deepseekform(object):
         h_model = QtWidgets.QHBoxLayout()
         self.label_selectmodel = QtWidgets.QLabel()
         self.label_selectmodel.setObjectName("label_selectmodel")
-        self.label_selectmodel.setText("Model")
+        self.label_selectmodel.setText(tr('Text  Or Srt  Translation')+tr("Model"))
         self.deepseek_model = QtWidgets.QComboBox()
         self.deepseek_model.setMinimumSize(QtCore.QSize(0, 35))
         self.deepseek_model.setObjectName("deepseek_model")
@@ -59,21 +58,25 @@ class Ui_deepseekform(object):
         h_deepseek_max_token = QtWidgets.QHBoxLayout()
         label_deepseek_max_token = QtWidgets.QLabel()
         label_deepseek_max_token.setObjectName("label_deepseek_max_token")
-        label_deepseek_max_token.setText("Max token")
+        label_deepseek_max_token.setText(tr('Maximum output token'))
         self.deepseek_max_token = QtWidgets.QLineEdit()
         self.deepseek_max_token.setMinimumSize(QtCore.QSize(0, 35))
         self.deepseek_max_token.setObjectName("deepseek_max_token")
         
 
-        self.deepseek_thinking = QtWidgets.QCheckBox()
-        self.deepseek_thinking.setObjectName("deepseek_thinking")
-        self.deepseek_thinking.setText("Thinking")
-        
+
         h_deepseek_max_token.addWidget(label_deepseek_max_token)
         h_deepseek_max_token.addWidget(self.deepseek_max_token)
-        h_deepseek_max_token.addWidget(self.deepseek_thinking)
-        
+
         v1.addLayout(h_deepseek_max_token)
+
+        hreason = QtWidgets.QHBoxLayout()
+        hreason.addWidget(QtWidgets.QLabel(tr('Reasoning Effort')))
+        self.reasoning_effort=QtWidgets.QComboBox()
+        self.reasoning_effort.addItems(['default','none','low','medium','high','max'])
+        self.reasoning_effort.setToolTip(tr('none_effort'))
+        hreason.addWidget(self.reasoning_effort)
+        v1.addLayout(hreason)
 
         self.label_allmodels = QtWidgets.QLabel()
         self.label_allmodels.setObjectName("label_allmodels")
@@ -85,16 +88,16 @@ class Ui_deepseekform(object):
         self.edit_allmodels.setObjectName("edit_allmodels")
         v1.addWidget(self.edit_allmodels)
 
-        self.label_4 = QtWidgets.QLabel(deepseekform)
+        self.label_4 = QtWidgets.QLabel()
         self.label_4.setObjectName("label_4")
 
-        self.template = QtWidgets.QPlainTextEdit(deepseekform)
+        self.template = QtWidgets.QPlainTextEdit()
         self.template.setObjectName("template")
         self.template.setReadOnly(True)
         v1.addWidget(self.label_4)
         v1.addWidget(self.template)
 
-        self.set = QtWidgets.QPushButton(deepseekform)
+        self.set = QtWidgets.QPushButton()
         self.set.setMinimumSize(QtCore.QSize(0, 35))
         self.set.setObjectName("set")
 
@@ -117,24 +120,24 @@ class Ui_deepseekform(object):
         v1.addLayout(h4)
         self.template.setPlainText(tr("Prompt: Please open the {} file directly to modify it", 'deepseek', 'deepseek'))
 
-        self.retranslateUi(deepseekform)
-        QtCore.QMetaObject.connectSlotsByName(deepseekform)
+        self.retranslateUi(form)
+        QtCore.QMetaObject.connectSlotsByName(form)
 
 
     def update_ui(self):
         allmodels_str = settings.get('deepseek_model','')
-        allmodels = str(settings.get('deepseek_model','')).split(',')
+        allmodels = [x.strip() for x in str(settings.get('deepseek_model','')).split(',')]
         self.deepseek_model.clear()
         self.deepseek_model.addItems(allmodels)
         self.edit_allmodels.setPlainText(allmodels_str)
         self.deepseek_max_token.setText(str(params.get('deepseek_max_token',40960)))
 
-        self.deepseek_thinking.setChecked(bool(params.get("deepseek_thinking",False)))
+        self.reasoning_effort.setCurrentText(params.get("deepseek_reasoning_errort","default"))
         self.deepseek_key.setText(str(params.get("deepseek_key",'')))
         self.deepseek_model.setCurrentText(params.get("deepseek_model",''))
 
-    def retranslateUi(self, deepseekform):
-        deepseekform.setWindowTitle("DeepSeek AI")
+    def retranslateUi(self, form):
+        form.setWindowTitle("DeepSeek AI")
         self.label_2.setText(tr("SK"))
         self.label_4.setText(tr("{lang} represents the target language name, do not delete it."))
         self.set.setText(tr('Save'))

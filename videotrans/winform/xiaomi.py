@@ -1,21 +1,22 @@
 def openwin():
+    from videotrans.winform import get_cls
+    from pathlib import Path
     from videotrans.configure.config import tr,params,app_cfg
     from videotrans.util.TestSrtTrans import TestSrtTrans
     from videotrans import translator
     from videotrans.winform._helpers import make_feed_translator, make_setallmodels
-    from videotrans.component.set_form import XiaomiForm
 
-    winobj = XiaomiForm()
-    app_cfg.child_forms['xiaomi'] = winobj
+
+    winobj = get_cls(Path(__file__).stem)()
     winobj.update_ui()
 
     feed = make_feed_translator(winobj, "test")
 
     def test():
-        params["xiaomi_key"] = winobj.xiaomi_key.text()
+        params["xiaomi_key"] = winobj.xiaomi_key.text().strip()
         params["xiaomi_model"] = winobj.model.currentText()
-        params["xiaomi_maxtoken"] = winobj.xiaomi_maxtoken.text()
-        params["xiaomi_thinking"] = winobj.xiaomi_thinking.isChecked()
+        params["xiaomi_max_token"] = winobj.xiaomi_max_token.text()
+        params["xiaomi_reasoning_effort"] = winobj.reasoning_effort.currentText()
         params["xiaomi_ttsmodel"] = winobj.ttsmodel.currentText()
         params.save()
         winobj.test.setText(tr("Testing..."))
@@ -24,10 +25,10 @@ def openwin():
         task.start()
 
     def save():
-        params["xiaomi_key"] = winobj.xiaomi_key.text()
+        params["xiaomi_key"] = winobj.xiaomi_key.text().strip()
         params["xiaomi_model"] = winobj.model.currentText()
-        params["xiaomi_maxtoken"] = winobj.xiaomi_maxtoken.text()
-        params["xiaomi_thinking"] = winobj.xiaomi_thinking.isChecked()
+        params["xiaomi_max_token"] = winobj.xiaomi_max_token.text()
+        params["xiaomi_reasoning_effort"] = winobj.reasoning_effort.currentText()
         params["xiaomi_ttsmodel"] = winobj.ttsmodel.currentText()
         params.save()
         winobj.close()
@@ -35,4 +36,4 @@ def openwin():
     winobj.set_xiaomi.clicked.connect(save)
     winobj.test.clicked.connect(test)
     winobj.edit_allmodels.textChanged.connect(make_setallmodels(winobj, 'model', 'xiaomi_model'))
-    winobj.show()
+    return winobj

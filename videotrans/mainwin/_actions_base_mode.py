@@ -1,7 +1,7 @@
 import platform
 
 from videotrans.configure.config import tr, defaulelang
-
+from videotrans.recognition import ALLOW_CHANGE_MODEL
 
 class WinActionBaseModeMixin:
 
@@ -24,7 +24,7 @@ class WinActionBaseModeMixin:
         self.main.label_3.show()
         self.main.target_language.show()
         self.main.label.show()
-        if defaulelang == 'zh':
+        if defaulelang == 'zh_CN':
             self.main.proxy.show()
 
         self.main.tts_text.show()
@@ -87,7 +87,7 @@ class WinActionBaseModeMixin:
         self.main.label_3.show()
         self.main.target_language.show()
         self.main.label.show()
-        if defaulelang == 'zh':
+        if defaulelang == 'zh_CN':
             self.main.proxy.show()
 
         self.main.recogn2pass.hide()
@@ -132,7 +132,8 @@ class WinActionBaseModeMixin:
         self.hide_show_element(self.main.dubb_thread_layout, self.show_adv_status)
         self.main.advcontainer.setVisible(self.show_adv_status)
 
-    def hide_show_element(self, wrap_layout, show_status):
+    @staticmethod
+    def hide_show_element(wrap_layout, show_status):
         def hide_recursive(layout, show_status):
             for i in range(layout.count()):
                 item = layout.itemAt(i)
@@ -180,7 +181,9 @@ class WinActionBaseModeMixin:
         self.main.source_language.setDisabled(type)
         self.main.target_language.setDisabled(type)
         self.main.tts_type.setDisabled(type)
-        self.main.model_name.setDisabled(type)
+        
+        _recogn_type=self.main.recogn_type.currentIndex()
+        self.main.model_name.setDisabled(True if type or _recogn_type not in ALLOW_CHANGE_MODEL else False)
         self.main.subtitle_type.setDisabled(type)
         self.main.enable_cuda.setDisabled(type)
         self.main.recogn_type.setDisabled(type)

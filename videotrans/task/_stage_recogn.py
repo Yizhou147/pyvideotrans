@@ -7,9 +7,9 @@ from pathlib import Path
 import os
 
 from videotrans.configure.config import tr, ROOT_DIR, settings, logger
-from videotrans.configure.contants import DENOISE_URL_MS, PUNC_RESTORE_MS, DENOISE_URL_HF, PUNC_RESTORE_HF
+from videotrans.configure.constants import PUNC_RESTORE_MS, PUNC_RESTORE_HF
 from videotrans.configure.excepts import SpeechToTextError
-from videotrans.recognition import run as run_recogn, is_allow_lang as recogn_allow_lang, FASTER_WHISPER
+from videotrans.recognition import run as run_recogn,  FASTER_WHISPER
 from videotrans.util.help_ffmpeg import conver_to_16k, runffmpeg, cut_from_audio
 from videotrans.util.help_misc import vail_file, is_connect_hf
 from videotrans.util.help_srt import get_subtitle_from_srt, delete_punc
@@ -33,6 +33,8 @@ class RecognMixin:
         if not vail_file(self.cfg.source_wav):
             raise SpeechToTextError(tr("Failed to separate audio, please check the log or retry"))
         # 未分离人声背景时才降噪，已分离则不再降噪
+        if self.cfg.remove_noise and self.cfg.is_separate:
+            logger.warning(f'已进行人声背景声分离，忽略降噪处理')
         if self.cfg.remove_noise and not self.cfg.is_separate:
             from videotrans.util.help_down import down_file_from_hf
             _remove_noise_wav = f"{self.cfg.cache_folder}/remove_noise.wav"
@@ -45,11 +47,10 @@ class RecognMixin:
                 kw = {
                     "input_file": self.cfg.source_wav if not self.cfg.vocal or not Path(self.cfg.vocal).exists() else self.cfg.vocal,
                     "output_file": _remove_noise_wav,
-                    "is_cuda": self.cfg.is_cuda
+                    "is_cuda": self.cfg.is_cuda,
+                    "model_name":settings.get('noise_model')
                 }
                 try:
-                    down_file_from_hf(f'{ROOT_DIR}/models/onnx', urls=DENOISE_URL_MS if not is_connect_hf() else DENOISE_URL_HF,
-                                            callback=self._process_callback)
                     from videotrans.process.prepare_audio import remove_noise
                     _rs = self._new_process(callback=remove_noise, title=title, is_cuda=self.cfg.is_cuda, kwargs=kw)
                     if _rs:
@@ -70,7 +71,6 @@ class RecognMixin:
             is_cuda=self.cfg.is_cuda,
             subtitle_type=self.cfg.subtitle_type,
             max_speakers=self.max_speakers,
-            llm_post=self.cfg.rephrase==1
         )
         if self._exit(): return
         if not raw_subtitles:
@@ -84,7 +84,7 @@ class RecognMixin:
         self._save_srt_target(raw_subtitles, self.cfg.source_sub)
         self.source_srt_list = raw_subtitles
         # 恢复标点
-        if self.cfg.fix_punc==1 and self.cfg.detect_language.split('-')[0] in ['zh', 'en']:
+        if self.cfg.fix_punc==1:
             try:
                 down_file_from_hf(f'{ROOT_DIR}/models/puntc', PUNC_RESTORE_MS if not is_connect_hf() else PUNC_RESTORE_HF, callback=self._process_callback)
                 from videotrans.process.prepare_audio import fix_punc
@@ -107,33 +107,17 @@ class RecognMixin:
                 logger.exception(f'标点恢复失败，跳过 {e}', exc_info=True)
 
         self.signal(text=Path(self.cfg.source_sub).read_text(encoding='utf-8'), type='replace_subtitle')
-        if Path(self.cfg.cache_folder + "/speaker.json").exists():
-            self._recogn_succeed()
-            self.signal(text=tr('endtiquzimu'))
-            return
-        
-        # 未选中说话人识别时，才重新断句
-        if self.cfg.rephrase==1 and (not self.do_diarize or not self.cfg.enable_diariz):
-            try:
-                from videotrans.translator._openaicompat import OpenAICampat
-                ob = OpenAICampat(
-                    ainame='chatgpt' if settings.get('llm_ai_type', 'chatgpt') != 'deepseek' else 'deepseek',
-                    uuid=self.uuid)
 
-                self.signal(text=tr("Re-segmenting..."))
-                srt_list = ob.llm_segment(self.source_srt_list )
-                if srt_list and len(srt_list) > len(self.source_srt_list) / 2:
-                    self.source_srt_list = srt_list
-                    self._save_srt_target(self.source_srt_list, self.cfg.source_sub)
-                else:
-                    logger.error(f'重新断句失败，已恢复原样,原始字幕行:{len(self.source_srt_list)}, 重新断句后字幕行:{len(srt_list)}\n断句结果:\n{srt_list=}')
-            except Exception as e:
-                self.signal(text=tr("Re-segmenting Error"))
-                logger.exception(f"重新断句失败，已恢复原样 {e}", exc_info=True)
+
+        # LLM纠错
+        if self.cfg.rephrase:
+            self.source_srt_list=self._llmpost(self.source_srt_list)
         
         self._recogn_succeed()
         self.signal(text=tr('endtiquzimu'))
         logger.debug(f'[语音识别阶段结束耗时]:{time.time()-_st}s')
+
+    # 降噪，Linux上并且不存在 audio.cpp 时，仍使用 onnx
 
     def _recogn_succeed(self) -> None:
         self.precent += 5
@@ -141,6 +125,7 @@ class RecognMixin:
             shutil.copy2(self.cfg.source_sub,  f"{self.cfg.target_dir}/{self.cfg.noextname}.srt")
         self.signal(text=tr('endtiquzimu'))
 
+    # 二次识别固定使用 faster-whisper 渠道
     def recogn2pass(self) -> None:
         _st=time.time()
         if not self.should_recogn2 or self._exit():
@@ -165,16 +150,11 @@ class RecognMixin:
             return
 
         try:
-            recogn_type = self.cfg.recogn_type
-            model_name = self.cfg.model_name
+
             detect_language = self.cfg.target_language_code.split('-')[0]
-
-            if recogn_allow_lang(langcode=self.cfg.target_language_code,
-                                 recogn_type=recogn_type,
-                                 model_name=model_name) is not True:
-                recogn_type = FASTER_WHISPER
-                model_name = 'large-v3-turbo'
-
+            recogn_type = FASTER_WHISPER
+            model_name = settings.get('model_for_recogn2','large-v3-turbo')
+            logger.debug(f'二次识别：faster-whisper + {detect_language=} + {model_name=}')
             raw_subtitles = run_recogn(
                 recogn_type=recogn_type,
                 uuid=self.uuid,
@@ -190,22 +170,8 @@ class RecognMixin:
                 logger.error('二次识别出错：' + tr('recogn result is empty'))
                 return
 
-            if self.cfg.rephrase==1 or Path(f'{ROOT_DIR}/recogn2-llm-resegment.txt').exists():
-                try:
-                    from videotrans.translator._openaicompat import OpenAICampat
-                    ob = OpenAICampat(
-                        ainame='chatgpt' if settings.get('llm_ai_type', 'chatgpt') != 'deepseek' else 'deepseek',
-                        uuid=self.uuid)
-
-                    self.signal(text=tr("Re-segmenting..."))
-                    srt_list = ob.llm_segment(raw_subtitles,step="2")
-                    if srt_list and len(srt_list) > len(raw_subtitles) / 2:
-                        raw_subtitles = srt_list
-                    else:
-                        logger.error(f'二次识别后LLM重新断句失败，已恢复原样,原始字幕行:{len(raw_subtitles)}, 重新断句后字幕行:{len(srt_list)}\n断句结果:\n{srt_list=}')
-                except Exception as e:
-                    self.signal(text=tr("Re-segmenting Error"))
-                    logger.exception(f"二次识别后重新断句失败，已恢复原样 {e}", exc_info=True)
+            if self.cfg.rephrase:
+                raw_subtitles=self._llmpost(raw_subtitles,'2')
 
             if self.cfg.fix_punc==2:
                 logger.debug('二次识别后，移除所有标点')
@@ -223,6 +189,8 @@ class RecognMixin:
             logger.exception(f'二次识别配音音频生成字幕时失败，静默跳过 {e}', exc_info=True)
             return
         logger.debug(f'[二次识别阶段结束耗时]:{time.time()-_st}s')
+
+
 
     def _create_ref_from_vocal(self):
         vocal = self.cfg.source_wav

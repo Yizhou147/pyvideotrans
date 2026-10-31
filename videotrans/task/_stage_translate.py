@@ -33,7 +33,8 @@ class TranslateMixin:
             text_list=copy.deepcopy(rawsrt),
             uuid=self.uuid,
             source_code=self.cfg.source_language_code,
-            target_code=self.cfg.target_language_code
+            target_code=self.cfg.target_language_code,
+            is_cuda=self.cfg.is_cuda
         )
         if self._exit():  return
 
@@ -46,7 +47,7 @@ class TranslateMixin:
         # 无需配音或提取模式，在此移除标点
         if self.cfg.app_mode=='tiqu' or not self.should_dubbing:
             for it in target_srt:
-                it['text']=it['text'].strip('...')
+                it['text']=it['text'].strip('...').strip('…').strip()
                 if self.cfg.fix_punc==2:
                     it['text']=delete_punc(it['text'])
 

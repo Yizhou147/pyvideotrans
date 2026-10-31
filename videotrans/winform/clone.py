@@ -1,15 +1,16 @@
 
 
 def openwin():
-    from videotrans.configure.contants import LISTEN_TEXT
+    from videotrans.winform import get_cls
+    from pathlib import Path
+    from videotrans.configure.constants import LISTEN_TEXT
     from videotrans.util.help_misc import set_process, show_error
     from videotrans.configure.config import tr,app_cfg,params
     from videotrans.configure import config
     from videotrans.util.ListenVoice import ListenVoice
-    from videotrans.component.set_form import CloneForm
 
-    winobj = CloneForm()
-    app_cfg.child_forms['clone'] = winobj
+
+    winobj = get_cls(Path(__file__).stem)()
 
     def feed(d):
         if d == "ok":
@@ -26,12 +27,13 @@ def openwin():
 
     def test():
         params['clone_api'] = _fix_url(winobj.clone_address.text().strip())
+        params.save()
         winobj.test.setText(tr("Testing..."))
         from videotrans import tts
         import time
         wk = ListenVoice(parent=winobj, queue_tts=[{
             "text":  LISTEN_TEXT.get('zh'),
-            "role": params.get("clone_voicelist",'')[1] if len(params.get("clone_voicelist",'')) > 1 else '',
+            "role": params.get("clone_voicelist",'').split(',')[-1],
             "filename": config.TEMP_DIR + f"/{time.time()}-clonevoice.wav",
             "tts_type": tts.CLONE_VOICE_TTS}],
                          language="zh",
@@ -49,4 +51,4 @@ def openwin():
         winobj.clone_address.setText(str(params.get("clone_api",'')))
     winobj.set_clone.clicked.connect(save)
     winobj.test.clicked.connect(test)
-    winobj.show()
+    return winobj

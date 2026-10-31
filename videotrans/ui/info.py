@@ -1,34 +1,32 @@
 import requests
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QByteArray, QThread, Signal
-from PySide6.QtGui import Qt, QPixmap
+from PySide6.QtGui import Qt, QPixmap, QIcon
+from PySide6.QtWidgets import QDialog
 
 from videotrans import VERSION
-from videotrans.configure.config import tr, app_cfg, defaulelang
+from videotrans.configure.config import tr, app_cfg, defaulelang, ROOT_DIR
 from videotrans.util.help_misc import open_url
 
 
-class Ui_infoform(object):
-    def setupUi(self, infoform):
-        infoform.setObjectName("infoform")
-        infoform.setWindowModality(QtCore.Qt.NonModal)
-        infoform.resize(1000, 650)
-        # sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum)
-        # sizePolicy.setHorizontalStretch(0)
-        # sizePolicy.setVerticalStretch(0)
-        # sizePolicy.setHeightForWidth(infoform.sizePolicy().hasHeightForWidth())
-        # infoform.setSizePolicy(sizePolicy)
-        self.v1 = QtWidgets.QVBoxLayout(infoform)
-        # 将 v1 设为垂直顶部对齐
+class Ui_info(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowIcon(QIcon(f"{ROOT_DIR}/videotrans/styles/icon.ico"))
+        self.setupUi(self)
+    def setupUi(self, form):
+        form.setObjectName("form")
+        form.resize(1000, 650)
+        self.v1 = QtWidgets.QVBoxLayout(form)
         self.v1.setAlignment(Qt.AlignTop)
 
-        self.label = QtWidgets.QLabel(infoform)
+        self.label = QtWidgets.QLabel()
         self.label.setText(
             tr("Donate to help the software to keep on maintaining"))
         self.label.setStyleSheet("""font-size:20px""")
         self.v1.addWidget(self.label)
 
-        self.text1 = QtWidgets.QPlainTextEdit(infoform)
+        self.text1 = QtWidgets.QPlainTextEdit()
         self.text1.setObjectName("text1")
         self.text1.setReadOnly(True)
         self.text1.setMaximumHeight(500)
@@ -48,7 +46,7 @@ Email: jianchang512@gmail.com
 GitHub: https://github.com/jianchang512/pyvideotrans
 【软件免费下载使用，不收取任何费用，也未在任何平台销售】
 
-""" if defaulelang == 'zh' else f"""
+""" if defaulelang == 'zh_CN' else f"""
 {en_version_info}
 
 This project is created based on interest, there is no commercial and no charge plan, you can use it for free or fork it and modify it (open source license GPL-v3). 
@@ -67,18 +65,18 @@ GitHub: https://github.com/jianchang512/pyvideotrans
         """)
         self.v1.addWidget(self.text1)
 
-        self.link = QtWidgets.QLabel(infoform)
+        self.link = QtWidgets.QLabel()
         self.link.setText(
             tr("Thank all donators, Click to view the list of donators"))
 
-        label = QtWidgets.QLabel(infoform)
+        label = QtWidgets.QLabel()
         label.setText(
             tr("You can scan the QR code or click the above button to donate via the web"))
         self.v1.addWidget(self.link)
         self.v1.addWidget(label)
 
         self.h1 = QtWidgets.QHBoxLayout()
-        if defaulelang == 'zh':
+        if defaulelang  == 'zh_CN':
             self.wxpay = QtWidgets.QLabel()
             self.alipay = QtWidgets.QLabel()
             self.mp = QtWidgets.QLabel()
@@ -104,7 +102,7 @@ GitHub: https://github.com/jianchang512/pyvideotrans
             mptask.start()
         else:
             self.v1.addLayout(self.h1)
-            link2 = QtWidgets.QPushButton(infoform)
+            link2 = QtWidgets.QPushButton()
             # 点击链接到 https://ko-fi.com/jianchang512
             link2.setText("Or Donate via https://ko-fi.com/jianchang512")
             link2.setFixedHeight(35)
@@ -117,15 +115,14 @@ GitHub: https://github.com/jianchang512/pyvideotrans
         lawbtn = QtWidgets.QPushButton()
         lawbtn.setFixedHeight(35)
         lawbtn.setMaximumWidth(300)
-        # lawbtn.setStyleSheet("background-color:rgba(255,255,255,0);text-align:left""")
         lawbtn.setCursor(Qt.PointingHandCursor)
         lawbtn.setText(tr("Software License Agreement"))
         lawbtn.clicked.connect(lambda: open_url('https://pyvideotrans.com/law.html'))
         self.v1.addWidget(lawbtn)
         self.v1.addStretch()
-        infoform.setWindowTitle(
+        form.setWindowTitle(
             tr("Donate to help the software to keep on maintaining"))
-        QtCore.QMetaObject.connectSlotsByName(infoform)
+        QtCore.QMetaObject.connectSlotsByName(form)
 
     def showimg(self, name):
         pixmap = QPixmap()

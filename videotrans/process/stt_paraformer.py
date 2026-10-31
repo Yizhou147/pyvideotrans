@@ -5,7 +5,7 @@
 import json, traceback
 from pathlib import Path
 from typing import List, Tuple, Union
-from videotrans.task.taskcfg import SrtItem
+
 from videotrans.configure.config import logger,ROOT_DIR
 
 
@@ -19,18 +19,21 @@ def paraformer(
         max_speakers=-1,
         cache_folder=None,
         device_index=0,  # gpu索引
-        hotword=None
-) -> Tuple[Union[List[SrtItem], bool], Union[str, None]]:
+        hotword=None,
+        **kw
+):
     from modelscope.pipelines import pipeline
     from modelscope.utils.constant import Tasks
     from videotrans.util._srt_parse import ms_to_time_string
     from videotrans.process._stt_utils import _write_log
+    device=kw.get('device_name','auto')
+    if device=='auto':
+        device = f'cuda:{device_index}' if is_cuda else 'cpu'
+    msg = f'Load {model_name} running on {device}'
+    _write_log(logs_file, json.dumps({"type": "logs", "text":msg}))
+    logger.debug(f'阿里FunASR渠道使用 {msg}')
 
-    device = f'cuda:{device_index}' if is_cuda else 'cpu'
-    msg = f'Load {model_name} on {device}'
-    _write_log(logs_file, json.dumps({"type": "logs", "text": f'{msg}'}))
     raw_subtitles = []
-    logger.debug(f'阿里FunASR渠道使用 {model_name} 模型，{device=}')
     try:
         model = pipeline(
             task=Tasks.auto_speech_recognition,
@@ -61,14 +64,14 @@ def paraformer(
             i += 1
             if max_speakers > -1:
                 speaker_list.append(f"spk{it.get('spk', 0)}")
-            tmp = SrtItem(**{
+            tmp = {
                 "line": len(raw_subtitles) + 1,
                 "text": it['text'].strip(),
                 "start_time": it['start'],
                 "end_time": it['end'],
                 "startraw": f'{ms_to_time_string(ms=it["start"])}',
                 "endraw": f'{ms_to_time_string(ms=it["end"])}'
-            })
+            }
             _write_log(logs_file, json.dumps({"type": "subtitles", "text": f'paraformer-zh [{i}] {it["text"]}\n'}))
             tmp['time'] = f"{tmp['startraw']} --> {tmp['endraw']}"
             raw_subtitles.append(tmp)

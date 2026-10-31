@@ -2,16 +2,17 @@ from dataclasses import dataclass
 from videotrans.configure.config import params
 from videotrans.translator._openaicompat import OpenAICampat
 
-@dataclass
+@dataclass(repr=False)
 class XiaoMi(OpenAICampat):
 
     def __post_init__(self):
         self.ainame ='xiaomi'
-        self.max_tokens =int(params.get('xiaomi_maxtoken', 40960))
+        self.max_tokens =int(params.get('xiaomi_max_token', 40960))
         self.model_name = params.get('xiaomi_model')
         self.api_url = 'https://api.xiaomimimo.com/v1/'
         self.api_key = params.get('xiaomi_key', '')
-        self.extra_body={
-                "thinking": {"type": "disabled" if params.get('xiaomi_thinking') else 'disabled'}
-        }
+        effort=params.get('xiaomi_reasoning_effort')
+        if effort!='default':
+            self.reasoning_effort=effort
+            self.extra_body={"thinking": 'enabled' if effort!='none' else 'disabled'}
         super().__post_init__()
