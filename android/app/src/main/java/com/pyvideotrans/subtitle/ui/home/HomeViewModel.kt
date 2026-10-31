@@ -49,8 +49,8 @@ import java.util.Locale
 
 /** Something the task produced, and where it went. */
 data class OutputItem(
-    val name: String,
     val kind: String,
+    val file: File,
     val savedTo: String? = null,
 )
 
@@ -333,8 +333,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         LogBus.info("subtitle", "已写出 ${srtFile.name} (${formatBytes(srtFile.length())})")
 
         val outputs = mutableListOf(
-            OutputItem(srtFile.name, "字幕文件", publishOrNull(srtFile, outputTree)),
-            OutputItem(assFile.name, "带样式的字幕", publishOrNull(assFile, outputTree)),
+            OutputItem("字幕文件", srtFile, publishOrNull(srtFile, outputTree)),
+            OutputItem("带样式的字幕", assFile, publishOrNull(assFile, outputTree)),
         )
 
         if (softSubs) {
@@ -343,7 +343,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val muxed = File(workDir, "$baseName.subs.mp4")
             try {
                 mediaRepository.muxSoftSubtitles(videoFile, srtFile, muxed, SUBTITLE_LANGUAGE_TAG)
-                outputs += OutputItem(muxed.name, "软字幕视频", publishOrNull(muxed, outputTree))
+                outputs += OutputItem("软字幕视频", muxed, publishOrNull(muxed, outputTree))
                 LogBus.info("media", "已封装软字幕视频 ${muxed.name} (${formatBytes(muxed.length())})")
             } catch (ce: CancellationException) {
                 throw ce
@@ -703,7 +703,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     if (outputs.isEmpty()) {
                         append("\n没有生成字幕文件")
                     } else {
-                        append("\n输出：${outputs.joinToString("、") { it.name }}")
+                        append("\n输出：${outputs.joinToString("、") { it.file.name }}")
                         append(
                             if (snapshot.outputTree == null) {
                                 "\n未选择保存位置，文件暂时留在应用缓存中"

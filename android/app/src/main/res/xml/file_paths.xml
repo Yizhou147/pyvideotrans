@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Subtitles and muxed videos are written under cacheDir/jobs/<id>. Only that
+     subtree can leave the app, and only as a one-off read grant to whoever handles
+     the share intent. -->
+<paths>
+    <cache-path name="subtitle_jobs" path="jobs/" />
+</paths>

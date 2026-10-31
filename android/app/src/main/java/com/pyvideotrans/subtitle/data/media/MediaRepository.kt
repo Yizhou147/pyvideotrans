@@ -12,6 +12,7 @@ import com.pyvideotrans.subtitle.domain.model.MediaInfo
 import com.pyvideotrans.subtitle.util.LogBus
 import com.pyvideotrans.subtitle.util.formatBytes
 import com.pyvideotrans.subtitle.util.formatDurationMs
+import com.pyvideotrans.subtitle.util.mimeFor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -315,15 +316,6 @@ class MediaRepository(private val context: Context) {
             }
         }
     }
-
-    private fun mimeFor(name: String): String =
-        when (name.substringAfterLast('.', "").lowercase(Locale.US)) {
-            "mp4", "m4v", "mov" -> "video/mp4"
-            "mkv" -> "video/x-matroska"
-            "srt", "ass", "vtt" -> "text/plain"
-            "json" -> "application/json"
-            else -> "application/octet-stream"
-        }
 
     fun cancelActive() {
         val sessionId = activeFfmpegSessionId

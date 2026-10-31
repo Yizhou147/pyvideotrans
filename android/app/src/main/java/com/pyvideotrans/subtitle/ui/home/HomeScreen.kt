@@ -63,6 +63,7 @@ import com.pyvideotrans.subtitle.ui.theme.PtSurface
 import com.pyvideotrans.subtitle.ui.theme.PtText
 import com.pyvideotrans.subtitle.ui.theme.PtWarning
 import com.pyvideotrans.subtitle.util.LogBus
+import com.pyvideotrans.subtitle.util.Sharer
 import com.pyvideotrans.subtitle.util.formatBytes
 import kotlin.math.roundToInt
 
@@ -530,12 +531,28 @@ private fun OutputCard(
                 color = PtMuted,
             )
         } else {
+            val context = LocalContext.current
             state.outputs.forEach { item ->
-                KeyValueRow(
-                    label = item.kind,
-                    value = if (item.savedTo == null) "${item.name}（仅应用缓存）" else item.name,
-                    valueColor = if (item.savedTo == null) PtWarning else PtAccent,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        KeyValueRow(
+                            label = item.kind,
+                            value = if (item.savedTo == null) {
+                                "${item.file.name}（仅应用缓存）"
+                            } else {
+                                item.file.name
+                            },
+                            valueColor = if (item.savedTo == null) PtWarning else PtAccent,
+                        )
+                    }
+                    TextButton(onClick = { Sharer.share(context, item.file) }) {
+                        Text("分享")
+                    }
+                }
             }
         }
     }

@@ -28,6 +28,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Generated subtitle files live in the cache directory, which other apps
+             cannot read; they leave through scoped URIs from this provider instead. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- QNN's HTP stub links libcdsprpc.so by soname, but FastRPC lives on
              the vendor partition, outside an application's linker namespace.
              Declaring it lets the loader map the vendor library into our
