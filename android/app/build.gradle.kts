@@ -32,6 +32,7 @@ android {
             cmake {
                 arguments += listOf(
                     "-DWHISPER_DIR=${rootProject.projectDir}/third_party/whisper.cpp",
+                    "-DVulkan_INCLUDE_DIR=${rootProject.projectDir}/third_party/Vulkan-Headers/include",
                     "-DGGML_VULKAN=ON",
                     "-DGGML_OPENMP=OFF",
                     "-DGGML_NATIVE=OFF",

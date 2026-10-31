@@ -1,51 +1,69 @@
 #!/usr/bin/env bash
-# Fetches the pinned whisper.cpp sources used by the Android NDK build.
-# The tree is intentionally not committed (see android/.gitignore).
+# Fetches the pinned native dependencies used by the Android NDK build.
+# The trees are intentionally not committed (see android/.gitignore).
 set -euo pipefail
 
 WHISPER_TAG="${WHISPER_TAG:-v1.9.5}"
 WHISPER_COMMIT="${WHISPER_COMMIT:-d1be6fde11ac6e0407606b4e42fe72d34add8037}"
 WHISPER_REPO="${WHISPER_REPO:-https://github.com/ggml-org/whisper.cpp.git}"
 
+# The NDK sysroot ships vulkan.h but not the Vulkan-Hpp (vulkan.hpp) bindings
+# required by ggml-vulkan. Pin the Khronos headers used by the target build.
+VULKAN_HEADERS_TAG="${VULKAN_HEADERS_TAG:-vulkan-sdk-1.4.335.0}"
+VULKAN_HEADERS_COMMIT="${VULKAN_HEADERS_COMMIT:-2fa203425eb4af9dfc6b03f97ef72b0b5bcb8350}"
+VULKAN_HEADERS_REPO="${VULKAN_HEADERS_REPO:-https://github.com/KhronosGroup/Vulkan-Headers.git}"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEST_DIR="$ROOT_DIR/third_party/whisper.cpp"
-STAMP_FILE="$DEST_DIR/.pinned-commit"
+THIRD_PARTY_DIR="$ROOT_DIR/third_party"
 
 log() {
     printf '[native-deps] %s\n' "$*"
 }
 
-if [[ -f "$STAMP_FILE" && -f "$DEST_DIR/CMakeLists.txt" ]]; then
-    CURRENT_COMMIT="$(cat "$STAMP_FILE" 2>/dev/null || true)"
-    if [[ "$CURRENT_COMMIT" == "$WHISPER_COMMIT" ]]; then
-        log "whisper.cpp $WHISPER_TAG ($WHISPER_COMMIT) already present"
-        exit 0
+# fetch_pinned <name> <repo> <tag> <commit> <dest-dir> <marker-file>
+fetch_pinned() {
+    local name="$1" repo="$2" tag="$3" commit="$4" dest="$5" marker="$6"
+
+    if [[ -f "$dest/$marker" && -f "$dest/CMakeLists.txt" ]]; then
+        local current
+        current="$(cat "$dest/$marker" 2>/dev/null || true)"
+        if [[ "$current" == "$commit" ]]; then
+            log "$name $tag ($commit) already present"
+            return 0
+        fi
     fi
-fi
+
+    mkdir -p "$THIRD_PARTY_DIR"
+    local tmp
+    tmp="$(mktemp -d "$THIRD_PARTY_DIR/.${name}-src.XXXXXX")"
+    # shellcheck disable=SC2064
+    trap "rm -rf '$tmp'" EXIT
+
+    log "cloning $repo at $tag"
+    git clone --depth 1 --single-branch --branch "$tag" "$repo" "$tmp"
+
+    local actual
+    actual="$(git -C "$tmp" rev-parse HEAD)"
+    if [[ "$actual" != "$commit" ]]; then
+        log "unexpected $name commit: $actual (expected $commit)"
+        exit 1
+    fi
+
+    rm -rf "$tmp/.git"
+    rm -rf "$dest"
+    mv "$tmp" "$dest"
+    printf '%s\n' "$commit" > "$dest/$marker"
+    trap - EXIT
+    log "$name $tag ready at $dest"
+}
 
 if ! command -v git >/dev/null 2>&1; then
     log "git is required"
     exit 1
 fi
 
-mkdir -p "$ROOT_DIR/third_party"
-TMP_DIR="$(mktemp -d "$ROOT_DIR/third_party/.whisper-src.XXXXXX")"
-cleanup() {
-    rm -rf "$TMP_DIR"
-}
-trap cleanup EXIT
+fetch_pinned "whisper.cpp" "$WHISPER_REPO" "$WHISPER_TAG" "$WHISPER_COMMIT" \
+    "$THIRD_PARTY_DIR/whisper.cpp" ".pinned-commit"
 
-log "cloning $WHISPER_REPO at $WHISPER_TAG"
-git clone --depth 1 --single-branch --branch "$WHISPER_TAG" "$WHISPER_REPO" "$TMP_DIR"
-
-ACTUAL_COMMIT="$(git -C "$TMP_DIR" rev-parse HEAD)"
-if [[ "$ACTUAL_COMMIT" != "$WHISPER_COMMIT" ]]; then
-    log "unexpected whisper.cpp commit: $ACTUAL_COMMIT (expected $WHISPER_COMMIT)"
-    exit 1
-fi
-
-rm -rf "$TMP_DIR/.git"
-rm -rf "$DEST_DIR"
-mv "$TMP_DIR" "$DEST_DIR"
-printf '%s\n' "$WHISPER_COMMIT" > "$STAMP_FILE"
-log "whisper.cpp $WHISPER_TAG ready at $DEST_DIR"
+fetch_pinned "Vulkan-Headers" "$VULKAN_HEADERS_REPO" "$VULKAN_HEADERS_TAG" "$VULKAN_HEADERS_COMMIT" \
+    "$THIRD_PARTY_DIR/Vulkan-Headers" ".pinned-commit"

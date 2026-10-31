@@ -59,11 +59,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends glslc spirv-headers libvulkan-dev
 
-      - name: Cache pinned whisper.cpp sources
+      - name: Cache pinned native sources
         uses: actions/cache@v6
         with:
-          path: android/third_party/whisper.cpp
-          key: whisper-cpp-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-native-deps.sh') }}
+          path: |
+            android/third_party/whisper.cpp
+            android/third_party/Vulkan-Headers
+          key: native-src-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-native-deps.sh') }}
 
       - name: Fetch native dependencies
         working-directory: android
