@@ -19,7 +19,7 @@ class ModelManifestTest {
     @Test
     fun manifestHasAsrAndVadModels() {
         val manifest = manifest()
-        assertEquals(1, manifest.version)
+        assertEquals(2, manifest.version)
         assertTrue(manifest.models.isNotEmpty())
         assertTrue(manifest.models.any { it.kind == "asr" })
         assertEquals(1, manifest.models.count { it.isVad })
@@ -43,7 +43,14 @@ class ModelManifestTest {
                 "${spec.id} sha256 must be 64 hex chars",
                 Regex("[0-9a-f]{64}").matches(spec.sha256),
             )
-            assertTrue("${spec.id} must use https", spec.url.startsWith("https://"))
+            assertTrue("${spec.id} has no download urls", spec.urls.isNotEmpty())
+            spec.urls.forEach { url ->
+                assertTrue("${spec.id} must use https: $url", url.startsWith("https://"))
+            }
+            assertTrue(
+                "${spec.id} needs a ModelScope mirror for mainland networks",
+                spec.urls.any { it.contains("modelscope.cn") },
+            )
             assertTrue("${spec.id} needs a license", spec.license.isNotBlank())
             assertTrue(spec.kind == "asr" || spec.kind == "vad")
         }

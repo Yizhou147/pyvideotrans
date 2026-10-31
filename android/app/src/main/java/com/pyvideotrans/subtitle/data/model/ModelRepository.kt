@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import com.pyvideotrans.subtitle.util.LogBus
 import com.pyvideotrans.subtitle.util.formatBytes
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -87,13 +88,56 @@ class ModelRepository(private val context: Context) {
         if (target.isFile && target.length() == spec.sizeBytes) {
             return@withContext target
         }
+        if (spec.urls.isEmpty()) {
+            throw IOException("模型清单缺少下载地址")
+        }
 
+        val failures = mutableListOf<String>()
+        spec.urls.forEachIndexed { index, url ->
+            try {
+                downloadFrom(url, spec, onProgress)
+                return@withContext target
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                val host = hostOf(url)
+                val reason = t.message ?: t.javaClass.simpleName
+                failures += "$host：$reason"
+                LogBus.warn("model", "从 $host 下载 ${spec.name} 失败：$reason")
+                if (index < spec.urls.lastIndex) {
+                    LogBus.info("model", "改用备用地址 ${hostOf(spec.urls[index + 1])}")
+                }
+            }
+        }
+        throw IOException(
+            "下载失败（${failures.joinToString("；")}）。可在电脑下载 ${spec.fileName} 后通过“导入模型”安装。",
+        )
+    }
+
+    private suspend fun downloadFrom(
+        url: String,
+        spec: ModelSpec,
+        onProgress: (received: Long, total: Long) -> Unit,
+    ) {
+        val target = fileFor(spec)
         val part = File(target.parentFile, "${target.name}.part")
+        if (part.isFile && part.length() == spec.sizeBytes) {
+            if (sha256(part).equals(spec.sha256, ignoreCase = true)) {
+                moveIntoPlace(part, target)
+                LogBus.info("model", "已校验已有下载 ${spec.name} (${formatBytes(target.length())})")
+                return
+            }
+            part.delete()
+        }
+        if (part.isFile && part.length() > spec.sizeBytes) {
+            part.delete()
+        }
+
         var existing = part.takeIf { it.isFile }?.length() ?: 0L
         var connection: HttpURLConnection? = null
 
         try {
-            connection = (URL(spec.url).openConnection() as HttpURLConnection).apply {
+            connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 20_000
                 readTimeout = 60_000
                 instanceFollowRedirects = true
@@ -150,21 +194,30 @@ class ModelRepository(private val context: Context) {
             val digest = sha256(part)
             if (!digest.equals(spec.sha256, ignoreCase = true)) {
                 part.delete()
-                throw IOException("SHA-256 校验失败，下载内容可能损坏，请重试")
+                throw IOException("SHA-256 校验失败，下载内容可能损坏")
             }
 
-            Files.move(
-                part.toPath(),
-                target.toPath(),
-                StandardCopyOption.REPLACE_EXISTING,
-                StandardCopyOption.ATOMIC_MOVE,
+            moveIntoPlace(part, target)
+            LogBus.info(
+                "model",
+                "已从 ${hostOf(url)} 下载并校验 ${spec.name} (${formatBytes(target.length())})",
             )
-            LogBus.info("model", "已下载并校验 ${spec.name} (${formatBytes(target.length())})")
-            target
         } finally {
             connection?.disconnect()
         }
     }
+
+    private fun moveIntoPlace(part: File, target: File) {
+        Files.move(
+            part.toPath(),
+            target.toPath(),
+            StandardCopyOption.REPLACE_EXISTING,
+            StandardCopyOption.ATOMIC_MOVE,
+        )
+    }
+
+    private fun hostOf(url: String): String =
+        runCatching { URL(url).host }.getOrNull().takeUnless { it.isNullOrBlank() } ?: url
 
     suspend fun importAsr(uri: Uri): File = withContext(Dispatchers.IO) {
         val sanitized = sanitizeFileName(queryDisplayName(uri))

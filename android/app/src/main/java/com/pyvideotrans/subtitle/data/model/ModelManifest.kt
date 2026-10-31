@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ModelManifest(
-    val version: Int = 1,
+    val version: Int = 2,
     val models: List<ModelSpec> = emptyList(),
 )
 
@@ -16,7 +16,7 @@ data class ModelSpec(
     val fileName: String,
     val sizeBytes: Long,
     val sha256: String,
-    val url: String,
+    val urls: List<String>,
     val license: String = "",
     val description: String = "",
 ) {

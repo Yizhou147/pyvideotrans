@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "models": [
     {
       "id": "whisper-large-v3-turbo-q5_0",
@@ -8,7 +8,10 @@
       "fileName": "ggml-large-v3-turbo-q5_0.bin",
       "sizeBytes": 574041195,
       "sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
-      "url": "https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+      "urls": [
+        "https://modelscope.cn/models/viggocx/whisper.cpp/resolve/master/ggml-large-v3-turbo-q5_0.bin",
+        "https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin"
+      ],
       "license": "MIT",
       "description": "推荐，12GB 及以上内存。中文与多语种质量最好，速度明显快于 large-v3。"
     },
@@ -19,7 +22,10 @@
       "fileName": "ggml-small.bin",
       "sizeBytes": 487601967,
       "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
-      "url": "https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
+      "urls": [
+        "https://modelscope.cn/models/viggocx/whisper.cpp/resolve/master/ggml-small.bin",
+        "https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
+      ],
       "license": "MIT",
       "description": "8GB 内存或需要更快速度时使用。中文准确率低于 large-v3-turbo。"
     },
@@ -30,7 +36,10 @@
       "fileName": "ggml-tiny.bin",
       "sizeBytes": 77691713,
       "sha256": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
-      "url": "https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
+      "urls": [
+        "https://modelscope.cn/models/viggocx/whisper.cpp/resolve/master/ggml-tiny.bin",
+        "https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"
+      ],
       "license": "MIT",
       "description": "最小体积，仅用于流程验证和低内存设备，正式字幕不建议使用。"
     },
@@ -41,7 +50,10 @@
       "fileName": "ggml-silero-v6.2.0.bin",
       "sizeBytes": 885098,
       "sha256": "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987",
-      "url": "https://hf-mirror.com/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin",
+      "urls": [
+        "https://modelscope.cn/models/ggml-org/whisper-vad/resolve/master/ggml-silero-v6.2.0.bin",
+        "https://hf-mirror.com/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin"
+      ],
       "license": "MIT",
       "description": "语音活动检测模型，用于跳过静音、减少幻听。建议始终启用。"
     }
