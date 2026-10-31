@@ -186,12 +186,37 @@ class QnnAsrService : Service() {
                 "原生日志不可用：native stderr 重定向失败"
             },
         )
+
+        // FastRPC first: the HTP stub needs libcdsprpc.so, which is not in the
+        // app namespace search path. Loading it by full vendor path registers the
+        // soname, so report the loader verdict and then re-check the stub.
+        emit(diagFile, "FastRPC 环境 ${cdspProbeReport(applicationContext, nativeDir)}")
+        cdspProbeTargets().forEach { target ->
+            QnnNativeProbe.probeCdspRpc(target)
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .forEach { emit(diagFile, "FastRPC 命令行检查 $it") }
+        }
+        val preload = cdspRpcPaths()
+        if (preload.isEmpty()) {
+            emit(diagFile, "FastRPC 加载 应用侧找不到任何 libcdsprpc.so")
+        } else {
+            QnnNativeProbe.probePaths(preload).forEach { emit(diagFile, "FastRPC 加载 $it") }
+        }
+        val (usable, _) = cdspLibraryPaths(nativeDir)
+        if (usable.isNotBlank() && QnnNativeProbe.setEnv("LD_LIBRARY_PATH", usable)) {
+            emit(diagFile, "已设置 LD_LIBRARY_PATH=$usable")
+        }
+
         QnnNativeProbe
             .probe(nativeDir, QnnSupport.hostLoadableLibs(QnnSoc.detect()))
-            .forEach { line ->
-                runCatching { diagFile.appendText("探针：$line\n") }
-                sendLog("运行库检查 $line")
-            }
+            .forEach { line -> emit(diagFile, "运行库检查 $line") }
+    }
+
+    private fun emit(diagFile: File, line: String) {
+        runCatching { diagFile.appendText("$line\n") }
+        sendLog(line)
     }
 
     private fun sendProgress(percent: Int) {

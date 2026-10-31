@@ -253,7 +253,7 @@ private fun readNativeDiagTail(context: Context): String = runCatching {
         .lines()
         .map { it.trim() }
         .filter { it.isNotEmpty() }
-        .takeLast(12)
+        .takeLast(30)
         .joinToString(" / ")
-    tail.take(1600)
+    tail.take(3200)
 }.getOrDefault("")

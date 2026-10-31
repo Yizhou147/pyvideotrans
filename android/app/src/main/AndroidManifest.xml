@@ -28,6 +28,18 @@
             </intent-filter>
         </activity>
 
+        <!-- QNN's HTP stub links libcdsprpc.so by soname, but FastRPC lives on
+             the vendor partition, outside an application's linker namespace.
+             Declaring it lets the loader map the vendor library into our
+             namespace where the OEM publishes it; required="false" keeps the
+             APK installable on devices that do not. -->
+        <uses-native-library
+            android:name="libcdsprpc.so"
+            android:required="false" />
+        <uses-native-library
+            android:name="libadsprpc.so"
+            android:required="false" />
+
         <!-- QNN calls exit() inside the native library on any backend error, so
              NPU inference runs in its own process to keep the UI alive. -->
         <service

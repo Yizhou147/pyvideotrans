@@ -19,6 +19,12 @@ object QnnNativeProbe {
     @JvmStatic
     private external fun nativeProbeLibraries(paths: Array<String>): String
 
+    @JvmStatic
+    private external fun nativeSetEnv(name: String, value: String)
+
+    @JvmStatic
+    private external fun nativeProbeCdspRpc(file: String): String
+
     val isAvailable: Boolean
         get() = WhisperNative.isAvailable
 
@@ -35,18 +41,40 @@ object QnnNativeProbe {
         }
     }
 
-    fun probe(nativeDir: File, libNames: List<String>): List<String> {
+    fun probe(nativeDir: File, libNames: List<String>): List<String> =
+        probePaths(libNames.map { File(nativeDir, it).absolutePath })
+
+    /**
+     * dlopen's each absolute path and reports what the loader said. Loading
+     * `libcdsprpc.so` from a full vendor path also registers its soname in this
+     * namespace, which is what lets the HTP stub's `DT_NEEDED` entry resolve.
+     */
+    fun probePaths(paths: List<String>): List<String> {
         if (!isAvailable) {
             return listOf("whisper_jni 未加载：${WhisperNative.loadError}")
         }
         return runCatching {
-            val paths = libNames.map { File(nativeDir, it).absolutePath }
             nativeProbeLibraries(paths.toTypedArray())
                 .lineSequence()
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
                 .toList()
         }.getOrElse { t -> listOf("运行库探针失败：${t.message}") }
+    }
+
+    /** What a command-line process sees, for a path the app itself cannot open. */
+    fun probeCdspRpc(path: String): String {
+        if (!isAvailable || path.isBlank()) return ""
+        return runCatching { nativeProbeCdspRpc(path) }.getOrElse { t -> "命令行探针失败：${t.message}" }
+    }
+
+    /**
+     * Overwrites a native environment variable. `unsetenv` when [value] is empty.
+     * Only effective for libraries the loader has not resolved yet.
+     */
+    fun setEnv(name: String, value: String): Boolean {
+        if (!isAvailable) return false
+        return runCatching { nativeSetEnv(name, value) }.isSuccess
     }
 
     init {
