@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Build
 import com.pyvideotrans.subtitle.data.asr.WhisperNative
 import com.pyvideotrans.subtitle.ui.home.SubtitleJob
+import com.pyvideotrans.subtitle.util.CrashLog
 import com.pyvideotrans.subtitle.util.LogBus
 import com.pyvideotrans.subtitle.util.LogLevel
 
@@ -17,6 +18,7 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashLog.install(this)
 
         // The NPU worker process must not load whisper.cpp/Vulkan in addition
         // to sherpa-onnx: that wastes memory and can conflict with QNN.

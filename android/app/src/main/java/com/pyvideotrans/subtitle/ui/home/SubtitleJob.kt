@@ -468,8 +468,7 @@ class SubtitleJob(private val app: Application) {
                 outputs = emptyList(),
             )
         }
-        acquireWakeLock()
-        SubtitleService.start(app)
+        beginKeepingAwake()
         LogBus.info(
             "job",
             "任务开始：后端=${snapshot.backend.label}，NPU=${qnnModel?.spec?.name ?: "无"}，GGML=${model?.displayName ?: "无"}，线程=${snapshot.threads}",
@@ -851,8 +850,7 @@ class SubtitleJob(private val app: Application) {
                 outputs = emptyList(),
             )
         }
-        acquireWakeLock()
-        SubtitleService.start(app)
+        beginKeepingAwake()
         LogBus.info("job", "续跑上次任务：${record.videoName}，已识别 ${result.segments.size} 段")
 
         job = scope.launch {
@@ -919,9 +917,22 @@ class SubtitleJob(private val app: Application) {
         _state.update { it.copy(pending = JobStore.pending(app.cacheDir)) }
     }
 
+    /**
+     * These two are OS privileges the device can simply refuse, and neither is worth losing a
+     * run over: recognition continues either way, only the background guarantee is weaker.
+     */
+    private fun beginKeepingAwake() {
+        runCatching { acquireWakeLock() }.onFailure {
+            LogBus.warn("job", "唤醒锁未获得：${it.javaClass.name}: ${it.message}")
+        }
+        runCatching { SubtitleService.start(app) }.onFailure {
+            LogBus.warn("job", "前台服务未启动，切后台可能被冻结：${it.javaClass.name}: ${it.message}")
+        }
+    }
+
     private fun acquireWakeLock() {
         if (wakeLock?.isHeld == true) return
-        val powerManager = app.getSystemService(PowerManager::class.java)
+        val powerManager = app.getSystemService(PowerManager::class.java) ?: return
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
             "pyvideotrans:subtitle-job",

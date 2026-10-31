@@ -19,6 +19,8 @@ import androidx.core.content.ContextCompat
 import com.pyvideotrans.subtitle.App
 import com.pyvideotrans.subtitle.MainActivity
 import com.pyvideotrans.subtitle.R
+import com.pyvideotrans.subtitle.util.LogBus
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -36,7 +38,12 @@ import kotlinx.coroutines.launch
  */
 class SubtitleService : Service() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, error ->
+            // Nothing here is worth losing a recognition run over.
+            LogBus.error("service", "通知线程异常：${error.javaClass.name}: ${error.message}")
+        },
+    )
     private var watcher: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -45,8 +52,18 @@ class SubtitleService : Service() {
             return START_NOT_STICKY
         }
         val job = (application as App).subtitleJob
-        ensureChannel(this)
-        startForegroundNotification(job.state.value.phase, job.state.value.progress)
+        val established = runCatching {
+            ensureChannel(this)
+            startForegroundNotification(job.state.value.phase, job.state.value.progress)
+        }.onFailure {
+            LogBus.error("service", "前台服务未能建立：${it.javaClass.name}: ${it.message}")
+        }.isSuccess
+        if (!established) {
+            // Ending the service is what keeps the platform from reporting it as never having
+            // gone foreground, which is itself a crash.
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (watcher?.isActive != true) {
             watcher = scope.launch {
                 job.state.collect { state ->
@@ -68,10 +85,11 @@ class SubtitleService : Service() {
         ) {
             return
         }
-        NotificationManagerCompat.from(this).notify(
-            NOTIFICATION_ID,
-            buildNotification(this, phase, progress),
-        )
+        NotificationManagerCompat.from(this).runCatching {
+            notify(NOTIFICATION_ID, buildNotification(this@SubtitleService, phase, progress))
+        }.onFailure {
+            LogBus.warn("service", "通知未能更新：${it.javaClass.simpleName}: ${it.message}")
+        }
     }
 
     override fun onDestroy() {
@@ -82,16 +100,23 @@ class SubtitleService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startForegroundNotification(phase: String, progress: Int?) {
-        ServiceCompat.startForeground(
-            this,
-            NOTIFICATION_ID,
-            buildNotification(this, phase, progress),
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
-            } else {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            },
-        )
+        // OEM ROMs refuse some foreground-service types outright. Failing here must not take
+        // the app down with it: end the service and let the job keep running in the process.
+        runCatching {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                buildNotification(this, phase, progress),
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
+                } else {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                },
+            )
+        }.onFailure {
+            LogBus.error("service", "无法进入前台：${it.javaClass.name}: ${it.message}")
+            stopSelf()
+        }
     }
 
     companion object {
