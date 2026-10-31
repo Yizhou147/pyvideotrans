@@ -97,10 +97,14 @@ std::string RunAsShell(const char *const *command, const char *file) {
     std::string output;
     char buffer[256];
     ssize_t read_bytes = 0;
+    // Always read to end-of-file: stopping early can leave the child blocked on
+    // a full pipe, and then waitpid never returns.
+    bool truncated = false;
     while ((read_bytes = read(fds[0], buffer, sizeof(buffer))) > 0) {
-        output.append(buffer, static_cast<size_t>(read_bytes));
-        if (output.size() > 1024) {
-            break;
+        if (output.size() < 1024) {
+            output.append(buffer, static_cast<size_t>(read_bytes));
+        } else {
+            truncated = true;
         }
     }
     close(fds[0]);
@@ -108,6 +112,9 @@ std::string RunAsShell(const char *const *command, const char *file) {
     waitpid(pid, &status, 0);
     while (!output.empty() && (output.back() == '\n' || output.back() == '\r')) {
         output.pop_back();
+    }
+    if (truncated) {
+        output += "…";
     }
     if (output.empty()) {
         return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? "(无输出)" : "(执行失败)";
