@@ -13,6 +13,8 @@ import com.pyvideotrans.subtitle.data.asr.TranscriptionOutcome
 import com.pyvideotrans.subtitle.data.asr.TranscriptionResult
 import com.pyvideotrans.subtitle.data.asr.WhisperCppEngine
 import com.pyvideotrans.subtitle.data.asr.WhisperNative
+import com.pyvideotrans.subtitle.data.job.JobRecord
+import com.pyvideotrans.subtitle.data.job.JobStore
 import com.pyvideotrans.subtitle.data.media.MediaRepository
 import com.pyvideotrans.subtitle.data.model.LocalModel
 import com.pyvideotrans.subtitle.data.model.LocalQnnModel
@@ -81,6 +83,8 @@ data class HomeUiState(
     val outputTree: String? = null,
     val outputDirName: String = "",
     val outputs: List<OutputItem> = emptyList(),
+    /** Interrupted runs whose recognition output is still on disk. */
+    val pending: List<JobRecord> = emptyList(),
     val running: Boolean = false,
     val phase: String = "待命",
     val progress: Int? = null,
@@ -141,6 +145,7 @@ class SubtitleJob(private val app: Application) {
 
     init {
         refreshModels()
+        refreshPending()
     }
 
     fun refreshModels() {
@@ -675,6 +680,21 @@ class SubtitleJob(private val app: Application) {
                     LogBus.info("asr", "识别结果（${result.segments.size} 条，语言=$languageLabel）")
                 }
 
+                // Archiving the recognition output is what makes the run resumable: if the
+                // process dies while the files are written and muxed, the tail can be redone
+                // in seconds instead of re-recognising the whole audio.
+                if (result.segments.isNotEmpty()) {
+                    JobStore.writeTranscription(workDir, result)?.let { transcriptionFile ->
+                        JobStore.writeCheckpoint(
+                            jobDir = workDir,
+                            videoFile = videoFile,
+                            transcriptionFile = transcriptionFile,
+                            videoName = snapshot.videoName,
+                            chinese = chinese,
+                        )
+                    }
+                }
+
                 _state.update { it.copy(phase = "生成字幕文件") }
                 val outputs = if (result.segments.isEmpty()) {
                     emptyList()
@@ -781,6 +801,7 @@ class SubtitleJob(private val app: Application) {
                     if (outputsKept) {
                         listOfNotNull(copiedVideo, extractedWav).forEach { it.delete() }
                         File(dir, QNN_RESULT_NAME).delete()
+                        JobStore.dropCheckpoint(dir)
                     } else {
                         dir.deleteRecursively()
                     }
@@ -788,6 +809,7 @@ class SubtitleJob(private val app: Application) {
                 releaseWakeLock()
                 _state.update { it.copy(running = false) }
                 SubtitleService.stop(app)
+                refreshPending()
             }
         }
     }
@@ -800,6 +822,101 @@ class SubtitleJob(private val app: Application) {
         mediaRepository.cancelActive()
         engine.abort()
         job?.cancel()
+    }
+
+    /**
+     * Finishes a run that survived recognition but lost its process before the files were
+     * written: the expensive part is already on disk, so only the tail is repeated.
+     */
+    fun regenerate(record: JobRecord) {
+        val snapshot = _state.value
+        if (snapshot.running) return
+        val result = JobStore.readTranscription(record)
+        if (result == null) {
+            _state.update { it.copy(message = "上次的识别结果已不可用，请重新识别") }
+            return
+        }
+        val videoFile = File(record.videoPath)
+        if (!videoFile.isFile) {
+            _state.update { it.copy(message = "缓存里的视频副本已被清理，请重新识别") }
+            return
+        }
+        _state.update {
+            it.copy(
+                running = true,
+                phase = "读取上次识别结果",
+                progress = null,
+                summary = null,
+                message = null,
+                outputs = emptyList(),
+            )
+        }
+        acquireWakeLock()
+        SubtitleService.start(app)
+        LogBus.info("job", "续跑上次任务：${record.videoName}，已识别 ${result.segments.size} 段")
+
+        job = scope.launch {
+            var outputsKept = false
+            try {
+                _state.update { it.copy(phase = "读取视频信息") }
+                val media = mediaRepository.probe(videoFile)
+                val outputs = emitSubtitles(
+                    result = result,
+                    videoFile = videoFile,
+                    media = media,
+                    workDir = File(record.jobDir),
+                    baseName = baseNameOf(record.videoName),
+                    chinese = record.chinese,
+                    softSubs = snapshot.softSubs,
+                    outputTree = snapshot.outputTree?.let(Uri::parse),
+                )
+                outputsKept = outputs.isNotEmpty()
+                val saved = outputs.count { it.savedTo != null }
+                _state.update {
+                    it.copy(
+                        phase = "完成",
+                        progress = 100,
+                        summary = buildString {
+                            append("用上次的识别结果重新生成：${outputs.size} 个文件")
+                            if (snapshot.outputTree != null && outputs.isNotEmpty()) {
+                                append("\n已保存到所选位置：$saved/${outputs.size} 个文件")
+                            }
+                        },
+                        outputs = outputs,
+                    )
+                }
+            } catch (ce: CancellationException) {
+                LogBus.warn("job", "续跑已取消")
+                _state.update { it.copy(phase = "已取消", progress = null) }
+            } catch (t: Throwable) {
+                LogBus.error("job", t.message ?: t.toString())
+                _state.update {
+                    it.copy(phase = "失败", progress = null, message = t.message ?: "生成字幕失败")
+                }
+            } finally {
+                // On failure the checkpoint stays put: the recognition result is the whole
+                // point of the card, and deleting it would force a full re-run.
+                if (outputsKept) {
+                    videoFile.delete()
+                    JobStore.dropCheckpoint(File(record.jobDir))
+                }
+                releaseWakeLock()
+                _state.update { it.copy(running = false) }
+                SubtitleService.stop(app)
+                refreshPending()
+            }
+        }
+    }
+
+    /** Throws away an interrupted run, its cached video included. */
+    fun discardPending(record: JobRecord) {
+        JobStore.remove(record)
+        LogBus.info("job", "已丢弃未完成的任务：${record.videoName}")
+        refreshPending()
+    }
+
+    private fun refreshPending() {
+        _state.update { it.copy(pending = JobStore.pending(app.cacheDir)) }
     }
 
     private fun acquireWakeLock() {

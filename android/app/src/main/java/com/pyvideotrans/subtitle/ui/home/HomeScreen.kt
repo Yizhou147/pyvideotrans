@@ -228,6 +228,38 @@ private fun ConfigSection(
         )
         OutputCard(state = state, job = job, onPickDir = onPickOutputDir)
 
+        if (state.pending.isNotEmpty() && !state.running) {
+            SectionCard(title = "未完成的任务") {
+                state.pending.forEach { record ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = record.videoName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = PtText,
+                            )
+                            Text(
+                                text = "语音已识别，字幕还没写出",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = PtMuted,
+                            )
+                        }
+                        TextButton(onClick = { job.regenerate(record) }) { Text("继续") }
+                        TextButton(onClick = { job.discardPending(record) }) { Text("删除") }
+                    }
+                }
+                Text(
+                    text = "识别结果还在缓存里，继续只补字幕，不重新识别。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = PtMuted,
+                )
+            }
+        }
+
         if (state.running || state.phase != "待命") {
             ProgressCard(state = state, onCancel = job::cancel)
         }
