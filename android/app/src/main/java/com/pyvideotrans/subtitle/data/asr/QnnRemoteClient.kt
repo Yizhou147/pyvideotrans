@@ -233,10 +233,10 @@ private fun readNativeLogTail(): String = runCatching {
     )
     val text = process.inputStream.bufferedReader().use { it.readText() }
     process.waitFor()
-    text.lineSequence()
+    val matched = text.lines()
         .map { it.trim() }
-        .filter { line -> NATIVE_LOG_MARKERS.any { line.contains(it, ignoreCase = true) } }
+        .filter { line -> NATIVE_LOG_MARKERS.any { marker -> line.contains(marker, ignoreCase = true) } }
         .takeLast(8)
         .joinToString(" / ")
-        .take(700)
+    matched.take(700)
 }.getOrDefault("")
