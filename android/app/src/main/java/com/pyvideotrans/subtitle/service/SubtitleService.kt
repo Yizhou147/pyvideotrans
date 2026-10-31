@@ -1,5 +1,6 @@
 package com.pyvideotrans.subtitle.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,12 +8,14 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import com.pyvideotrans.subtitle.App
 import com.pyvideotrans.subtitle.MainActivity
 import com.pyvideotrans.subtitle.R
@@ -47,15 +50,25 @@ class SubtitleService : Service() {
         if (watcher?.isActive != true) {
             watcher = scope.launch {
                 job.state.collect { state ->
-                    NotificationManagerCompat.from(this@SubtitleService).notify(
-                        NOTIFICATION_ID,
-                        buildNotification(this@SubtitleService, state.phase, state.progress),
-                    )
+                    postNotification(state.phase, state.progress)
                     if (!state.running) stopSelf()
                 }
             }
         }
         return START_NOT_STICKY
+    }
+
+    /** A denied notification permission must not stop the job, nor the service ending. */
+    private fun postNotification(phase: String, progress: Int?) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        NotificationManagerCompat.from(this).notify(
+            NOTIFICATION_ID,
+            buildNotification(this, phase, progress),
+        )
     }
 
     override fun onDestroy() {
