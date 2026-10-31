@@ -13,6 +13,12 @@ VULKAN_HEADERS_TAG="${VULKAN_HEADERS_TAG:-vulkan-sdk-1.4.335.0}"
 VULKAN_HEADERS_COMMIT="${VULKAN_HEADERS_COMMIT:-2fa203425eb4af9dfc6b03f97ef72b0b5bcb8350}"
 VULKAN_HEADERS_REPO="${VULKAN_HEADERS_REPO:-https://github.com/KhronosGroup/Vulkan-Headers.git}"
 
+# ggml-vulkan includes <spirv/unified1/spirv.hpp>; the NDK sysroot does not
+# provide it either, so pin the Khronos SPIR-V headers to the same SDK tag.
+SPIRV_HEADERS_TAG="${SPIRV_HEADERS_TAG:-vulkan-sdk-1.4.335.0}"
+SPIRV_HEADERS_COMMIT="${SPIRV_HEADERS_COMMIT:-b824a462d4256d720bebb40e78b9eb8f78bbb305}"
+SPIRV_HEADERS_REPO="${SPIRV_HEADERS_REPO:-https://github.com/KhronosGroup/SPIRV-Headers.git}"
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 THIRD_PARTY_DIR="$ROOT_DIR/third_party"
 
@@ -67,3 +73,6 @@ fetch_pinned "whisper.cpp" "$WHISPER_REPO" "$WHISPER_TAG" "$WHISPER_COMMIT" \
 
 fetch_pinned "Vulkan-Headers" "$VULKAN_HEADERS_REPO" "$VULKAN_HEADERS_TAG" "$VULKAN_HEADERS_COMMIT" \
     "$THIRD_PARTY_DIR/Vulkan-Headers" ".pinned-commit"
+
+fetch_pinned "SPIRV-Headers" "$SPIRV_HEADERS_REPO" "$SPIRV_HEADERS_TAG" "$SPIRV_HEADERS_COMMIT" \
+    "$THIRD_PARTY_DIR/SPIRV-Headers" ".pinned-commit"

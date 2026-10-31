@@ -65,6 +65,7 @@ jobs:
           path: |
             android/third_party/whisper.cpp
             android/third_party/Vulkan-Headers
+            android/third_party/SPIRV-Headers
           key: native-src-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-native-deps.sh') }}
 
       - name: Fetch native dependencies
