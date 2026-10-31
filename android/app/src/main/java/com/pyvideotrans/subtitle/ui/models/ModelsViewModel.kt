@@ -44,6 +44,9 @@ class ModelsViewModel(application: Application) : AndroidViewModel(application) 
     private val _importing = MutableStateFlow(false)
     val importing: StateFlow<Boolean> = _importing.asStateFlow()
 
+    private val _importingVad = MutableStateFlow(false)
+    val importingVad: StateFlow<Boolean> = _importingVad.asStateFlow()
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
@@ -116,7 +119,7 @@ class ModelsViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun importModel(uri: Uri) {
-        if (_importing.value) return
+        if (_importing.value || _importingVad.value) return
         _importing.value = true
         _message.value = null
         viewModelScope.launch(Dispatchers.IO) {
@@ -129,6 +132,24 @@ class ModelsViewModel(application: Application) : AndroidViewModel(application) 
                 LogBus.error("model", "导入失败：${t.message}")
             } finally {
                 _importing.value = false
+            }
+        }
+    }
+
+    fun importVad(uri: Uri) {
+        if (_importing.value || _importingVad.value) return
+        _importingVad.value = true
+        _message.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val file = repository.importVad(uri)
+                _message.value = "已导入 VAD 模型：${file.name}"
+                refresh()
+            } catch (t: Throwable) {
+                _message.value = t.message ?: "VAD 导入失败"
+                LogBus.error("model", "VAD 导入失败：${t.message}")
+            } finally {
+                _importingVad.value = false
             }
         }
     }

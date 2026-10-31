@@ -226,26 +226,13 @@ class ModelRepository(private val context: Context) {
         val temp = File(asrDir, "${target.name}.importing")
 
         try {
-            val input = context.contentResolver.openInputStream(uri)
-                ?: throw IOException("无法读取所选文件")
-            input.use { source ->
-                temp.outputStream().use { sink -> source.copyTo(sink) }
-            }
+            copyUriTo(uri, temp)
             if (temp.length() < 1_048_576L) {
-                throw IOException("文件过小，不是有效的 Whisper GGML 模型")
+                throw IOException(
+                    "文件过小，不是有效的 Whisper 模型；Silero VAD（约 885 KB）请在“静音检测（VAD）”区域导入",
+                )
             }
-            val isGgml = DataInputStream(temp.inputStream().buffered()).use { input ->
-                val magic = ByteArray(4)
-                input.readFully(magic)
-                // whisper.cpp writes GGML_FILE_MAGIC (0x67676d6c, ASCII "ggml" as a
-                // little-endian integer), i.e. the file starts with bytes "lmgg".
-                val value = (magic[0].toInt() and 0xFF) or
-                    ((magic[1].toInt() and 0xFF) shl 8) or
-                    ((magic[2].toInt() and 0xFF) shl 16) or
-                    ((magic[3].toInt() and 0xFF) shl 24)
-                value == GGML_FILE_MAGIC
-            }
-            if (!isGgml) {
+            if (!hasGgmlMagic(temp)) {
                 throw IOException("不是 whisper.cpp GGML 模型（请使用 whisper.cpp 格式的 .bin 模型）")
             }
             Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
@@ -255,6 +242,55 @@ class ModelRepository(private val context: Context) {
             if (temp.exists()) temp.delete()
         }
     }
+
+    suspend fun importVad(uri: Uri): File = withContext(Dispatchers.IO) {
+        val spec = manifest().models.firstOrNull { it.isVad }
+            ?: throw IOException("模型清单中未配置 VAD")
+        val target = fileFor(spec)
+        val temp = File(vadDir, "${target.name}.importing")
+
+        try {
+            copyUriTo(uri, temp)
+            if (temp.length() < 100_000L || temp.length() > 10_000_000L) {
+                throw IOException(
+                    "VAD 文件大小异常（${formatBytes(temp.length())}），请选择 Silero VAD GGML 模型",
+                )
+            }
+            if (!hasGgmlMagic(temp)) {
+                throw IOException("不是 whisper.cpp GGML 格式的 VAD 模型")
+            }
+            val digest = sha256(temp)
+            if (!digest.equals(spec.sha256, ignoreCase = true)) {
+                throw IOException("SHA-256 与清单不匹配，不是受支持的 Silero VAD 模型")
+            }
+            Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            LogBus.info("model", "已导入 VAD 模型 ${target.name} (${formatBytes(target.length())})")
+            target
+        } finally {
+            if (temp.exists()) temp.delete()
+        }
+    }
+
+    private fun copyUriTo(uri: Uri, temp: File) {
+        val input = context.contentResolver.openInputStream(uri)
+            ?: throw IOException("无法读取所选文件")
+        input.use { source ->
+            temp.outputStream().use { sink -> source.copyTo(sink) }
+        }
+    }
+
+    private fun hasGgmlMagic(file: File): Boolean =
+        DataInputStream(file.inputStream().buffered()).use { input ->
+            val magic = ByteArray(4)
+            input.readFully(magic)
+            // whisper.cpp writes GGML_FILE_MAGIC (0x67676d6c, ASCII "ggml" as a
+            // little-endian integer), i.e. the file starts with bytes "lmgg".
+            val value = (magic[0].toInt() and 0xFF) or
+                ((magic[1].toInt() and 0xFF) shl 8) or
+                ((magic[2].toInt() and 0xFF) shl 16) or
+                ((magic[3].toInt() and 0xFF) shl 24)
+            value == GGML_FILE_MAGIC
+        }
 
     fun delete(spec: ModelSpec): Boolean {
         val target = fileFor(spec)

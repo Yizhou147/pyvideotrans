@@ -44,6 +44,14 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4.0.4
 
+      # Keep one debug signing key across runs so consecutive APKs can update
+      # in place instead of requiring an uninstall.
+      - name: Cache debug signing key
+        uses: actions/cache@v6
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-${{ runner.os }}-v1
+
       - name: Install SDK, NDK and CMake
         run: |
           yes | sdkmanager --licenses > /dev/null || true

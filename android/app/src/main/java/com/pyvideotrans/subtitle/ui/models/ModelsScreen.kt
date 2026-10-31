@@ -60,12 +60,16 @@ fun ModelsScreen(
     val downloads by viewModel.downloads.collectAsState()
     val vadReady by viewModel.vadReady.collectAsState()
     val importing by viewModel.importing.collectAsState()
+    val importingVad by viewModel.importingVad.collectAsState()
     val message by viewModel.message.collectAsState()
 
     var pendingDelete by remember { mutableStateOf<PendingDelete?>(null) }
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.importModel(uri)
+    }
+    val vadImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.importVad(uri)
     }
 
     Scaffold(
@@ -166,12 +170,28 @@ fun ModelsScreen(
                         onCancel = { viewModel.cancelDownload(vadSpec) },
                         onDelete = { pendingDelete = PendingDelete(vadSpec.name) { viewModel.delete(vadSpec) } },
                     )
+                    OutlinedButton(
+                        onClick = {
+                            vadImporter.launch(arrayOf("application/octet-stream", "application/x-binary", "*/*"))
+                        },
+                        enabled = !importing && !importingVad,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (importingVad) "正在导入 VAD…" else "从文件导入 VAD 模型")
+                    }
+                    if (importingVad) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = PtAccent,
+                            trackColor = PtProgress.copy(alpha = 0.35f),
+                        )
+                    }
                 }
             }
 
             SectionCard(title = "导入自定义模型") {
                 Text(
-                    text = "支持 whisper.cpp v1.9.5 的 GGML 格式 Whisper 模型（例如中文微调模型）。文件会复制到应用私有目录，不上传。",
+                    text = "支持 whisper.cpp v1.9.5 的 GGML 格式 Whisper 模型（例如中文微调模型）。Silero VAD 请在上方 VAD 区域导入。文件会复制到应用私有目录，不上传。",
                     style = MaterialTheme.typography.bodySmall,
                     color = PtMuted,
                 )
@@ -179,10 +199,10 @@ fun ModelsScreen(
                     onClick = {
                         importer.launch(arrayOf("application/octet-stream", "application/x-binary", "*/*"))
                     },
-                    enabled = !importing,
+                    enabled = !importing && !importingVad,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(if (importing) "正在导入…" else "选择模型文件导入")
+                    Text(if (importing) "正在导入…" else "选择 Whisper 模型文件导入")
                 }
                 if (importing) {
                     LinearProgressIndicator(
