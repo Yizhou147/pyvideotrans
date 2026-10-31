@@ -17,14 +17,33 @@ class ModelManifestTest {
     }
 
     @Test
-    fun manifestHasAsrAndVadModels() {
+    fun manifestHasAllModelKinds() {
         val manifest = manifest()
-        assertEquals(2, manifest.version)
+        assertEquals(3, manifest.version)
         assertTrue(manifest.models.isNotEmpty())
         assertTrue(manifest.models.any { it.kind == "asr" })
         assertEquals(1, manifest.models.count { it.isVad })
+        assertEquals(1, manifest.models.count { it.isVadOnnx })
         assertTrue(manifest.models.any { it.fileName == "ggml-large-v3-turbo-q5_0.bin" })
         assertTrue(manifest.models.any { it.fileName == "ggml-small.bin" })
+        assertEquals(9, manifest.models.count { it.isQnn })
+    }
+
+    @Test
+    fun qnnModelsCoverEachSupportedSoc() {
+        val manifest = manifest()
+        QNN_SOCS.forEach { soc ->
+            val models = manifest.models.filter { it.isQnn && it.soc == soc }
+            assertTrue("$soc needs NPU models", models.isNotEmpty())
+            assertEquals("$soc needs tiny/small/medium", 3, models.size)
+            models.forEach { spec ->
+                assertTrue("${spec.id} must be a .tar.bz2 archive", spec.fileName.endsWith(".tar.bz2"))
+                assertTrue(
+                    "${spec.id} must come from the QNN model release",
+                    spec.urls.all { it.contains("asr-models-qnn-binary") },
+                )
+            }
+        }
     }
 
     @Test
@@ -37,7 +56,6 @@ class ModelManifestTest {
             assertTrue("duplicate fileName ${spec.fileName}", names.add(spec.fileName))
             assertTrue(spec.id.isNotBlank())
             assertTrue(spec.name.isNotBlank())
-            assertTrue("${spec.id} must be a .bin file", spec.fileName.endsWith(".bin"))
             assertTrue("${spec.id} has no size", spec.sizeBytes > 0)
             assertTrue(
                 "${spec.id} sha256 must be 64 hex chars",
@@ -47,12 +65,30 @@ class ModelManifestTest {
             spec.urls.forEach { url ->
                 assertTrue("${spec.id} must use https: $url", url.startsWith("https://"))
             }
-            assertTrue(
-                "${spec.id} needs a ModelScope mirror for mainland networks",
-                spec.urls.any { it.contains("modelscope.cn") },
-            )
             assertTrue("${spec.id} needs a license", spec.license.isNotBlank())
-            assertTrue(spec.kind == "asr" || spec.kind == "vad")
+            assertTrue(
+                "unexpected kind ${spec.kind}",
+                spec.kind in setOf("asr", "vad", "vad-onnx", "qnn"),
+            )
+            when (spec.kind) {
+                "qnn" -> {
+                    assertTrue("${spec.id} needs a soc", spec.soc in QNN_SOCS)
+                }
+                "asr", "vad" -> {
+                    assertTrue("${spec.id} must be a .bin file", spec.fileName.endsWith(".bin"))
+                    assertTrue(
+                        "${spec.id} needs a ModelScope mirror for mainland networks",
+                        spec.urls.any { it.contains("modelscope.cn") },
+                    )
+                }
+                "vad-onnx" -> {
+                    assertTrue("${spec.id} must be an .onnx file", spec.fileName.endsWith(".onnx"))
+                }
+            }
         }
+    }
+
+    private companion object {
+        val QNN_SOCS = setOf("SM8850", "SM8750", "SM8650")
     }
 }

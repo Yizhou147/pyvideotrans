@@ -12,3 +12,7 @@ captures/
 # Re-include the Kotlin UI package that shares that name.
 !app/src/main/java/com/pyvideotrans/subtitle/ui/models/
 !app/src/main/java/com/pyvideotrans/subtitle/ui/models/**
+
+# Native libraries staged by scripts/build-sherpa-qnn.sh (QNN/ORT are not
+# redistributed from the source tree; CI stages them before packaging).
+app/src/main/jniLibs/

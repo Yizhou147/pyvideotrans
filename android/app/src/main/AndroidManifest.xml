@@ -12,7 +12,6 @@
     <application
         android:name=".App"
         android:allowBackup="false"
-        android:extractNativeLibs="false"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
@@ -28,6 +27,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- QNN calls exit() inside the native library on any backend error, so
+             NPU inference runs in its own process to keep the UI alive. -->
+        <service
+            android:name=".data.asr.QnnAsrService"
+            android:exported="false"
+            android:process=":npu" />
     </application>
 
 </manifest>

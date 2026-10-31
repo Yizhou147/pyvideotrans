@@ -8,6 +8,7 @@ composeBom = "2026.06.01"
 coroutines = "1.10.2"
 serialization = "1.9.0"
 ffmpegkit = "8.1.9"
+commonsCompress = "1.28.0"
 junit = "4.13.2"
 
 [libraries]
@@ -24,6 +25,7 @@ androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 ffmpegkit-full-gpl = { module = "dev.ffmpegkit-maintained:ffmpeg-kit-full-gpl", version.ref = "ffmpegkit" }
+commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commonsCompress" }
 junit = { module = "junit:junit", version.ref = "junit" }
 
 [plugins]

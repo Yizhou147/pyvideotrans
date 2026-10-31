@@ -59,8 +59,11 @@ fun ModelsScreen(
     val models by viewModel.models.collectAsState()
     val downloads by viewModel.downloads.collectAsState()
     val vadReady by viewModel.vadReady.collectAsState()
+    val onnxVadReady by viewModel.onnxVadReady.collectAsState()
+    val qnnInstalledIds by viewModel.qnnInstalledIds.collectAsState()
     val importing by viewModel.importing.collectAsState()
     val importingVad by viewModel.importingVad.collectAsState()
+    val importingQnn by viewModel.importingQnn.collectAsState()
     val message by viewModel.message.collectAsState()
 
     var pendingDelete by remember { mutableStateOf<PendingDelete?>(null) }
@@ -70,6 +73,12 @@ fun ModelsScreen(
     }
     val vadImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.importVad(uri)
+    }
+    val vadOnnxImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.importVadOnnx(uri)
+    }
+    val qnnImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.importQnn(uri)
     }
 
     Scaffold(
@@ -84,7 +93,7 @@ fun ModelsScreen(
                             color = PtText,
                         )
                         Text(
-                            text = "本地 GGML 模型 · 支持断点续传",
+                            text = "GGML 与 NPU 模型 · 支持断点续传",
                             style = MaterialTheme.typography.labelSmall,
                             color = PtMuted,
                         )
@@ -149,6 +158,111 @@ fun ModelsScreen(
                         onCancel = { viewModel.cancelDownload(spec) },
                         onDelete = { pendingDelete = PendingDelete(spec.name) { viewModel.delete(spec) } },
                     )
+                }
+            }
+
+            SectionCard(title = "NPU 模型（Qualcomm Hexagon）") {
+                val status = viewModel.qnnStatus
+                val soc = status.soc
+                if (soc == null) {
+                    Text(
+                        text = status.reason(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = PtMuted,
+                    )
+                    Text(
+                        text = "检测到：${status.detectedSoc}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = PtMuted,
+                    )
+                } else {
+                    Text(
+                        text = "${soc.label} · HTP v${soc.htpArch}。NPU 模型按 SoC 预编译，速度通常明显快于 GPU；模型与设备不匹配时请改用 GPU/CPU。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = PtMuted,
+                    )
+                    if (!status.ready) {
+                        Text(
+                            text = status.reason(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = PtError,
+                        )
+                    }
+                    val qnnSpecs = viewModel.manifest.models.filter {
+                        it.isQnn && it.soc.equals(soc.socModel, ignoreCase = true)
+                    }
+                    if (qnnSpecs.isEmpty()) {
+                        Text(
+                            text = "模型清单中没有 ${soc.socModel} 的 NPU 模型。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = PtError,
+                        )
+                    }
+                    qnnSpecs.forEachIndexed { index, spec ->
+                        if (index > 0) SectionDivider()
+                        val installed = qnnInstalledIds.contains(spec.id)
+                        ManifestModelRow(
+                            spec = spec,
+                            installed = installed,
+                            download = downloads[spec.id],
+                            onDownload = { viewModel.download(spec) },
+                            onCancel = { viewModel.cancelDownload(spec) },
+                            onDelete = { pendingDelete = PendingDelete(spec.name) { viewModel.delete(spec) } },
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            qnnImporter.launch(arrayOf("application/octet-stream", "application/x-bzip2", "*/*"))
+                        },
+                        enabled = !importingQnn,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (importingQnn) "正在导入 NPU 模型…" else "从文件导入 NPU 模型（.tar.bz2）")
+                    }
+                    if (importingQnn) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = PtAccent,
+                            trackColor = PtProgress.copy(alpha = 0.35f),
+                        )
+                    }
+
+                    SectionDivider()
+                    Text(
+                        text = "NPU 识别需要 Silero VAD ONNX 来切分语音；与 whisper.cpp 使用的 GGML VAD 是两个文件。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = PtMuted,
+                    )
+                    val onnxVadSpec = viewModel.manifest.models.firstOrNull { it.isVadOnnx }
+                    if (onnxVadSpec == null) {
+                        Text(
+                            text = "模型清单中未配置 Silero VAD ONNX。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = PtError,
+                        )
+                    } else {
+                        ManifestModelRow(
+                            spec = onnxVadSpec,
+                            installed = onnxVadReady,
+                            download = downloads[onnxVadSpec.id],
+                            onDownload = { viewModel.download(onnxVadSpec) },
+                            onCancel = { viewModel.cancelDownload(onnxVadSpec) },
+                            onDelete = {
+                                pendingDelete = PendingDelete(onnxVadSpec.name) { viewModel.delete(onnxVadSpec) }
+                            },
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                vadOnnxImporter.launch(
+                                    arrayOf("application/octet-stream", "application/x-onnx", "*/*"),
+                                )
+                            },
+                            enabled = !importingVad,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(if (importingVad) "正在导入 VAD ONNX…" else "从文件导入 Silero VAD ONNX")
+                        }
+                    }
                 }
             }
 
@@ -334,6 +448,13 @@ private fun ManifestModelRow(
                 style = MaterialTheme.typography.labelSmall,
                 color = PtMuted,
             )
+            activeDownload.phase?.let { phase ->
+                Text(
+                    text = phase,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = PtWarning,
+                )
+            }
             OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
                 Text("取消下载")
             }

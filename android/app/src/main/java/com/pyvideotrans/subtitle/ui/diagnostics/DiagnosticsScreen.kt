@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pyvideotrans.subtitle.BuildConfig
+import com.pyvideotrans.subtitle.data.asr.QnnSupport
 import com.pyvideotrans.subtitle.data.asr.WhisperNative
 import com.pyvideotrans.subtitle.ui.components.KeyValueRow
 import com.pyvideotrans.subtitle.ui.components.LogPanel
@@ -75,6 +76,8 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
         packageManager.hasSystemFeature("android.hardware.vulkan.compute")
     }.getOrDefault(false)
 
+    val qnnStatus = remember { QnnSupport.status(context) }
+
     val nativeProbe by produceState(initialValue = NativeProbe()) {
         value = withContext(Dispatchers.IO) {
             NativeProbe(
@@ -105,12 +108,12 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                 title = {
                     Column {
                         Text(
-                            text = "诊断与 GPU 信息",
+                            text = "诊断与后端信息",
                             style = MaterialTheme.typography.titleMedium,
                             color = PtText,
                         )
                         Text(
-                            text = "确认 Vulkan 与设备环境",
+                            text = "确认 NPU、Vulkan 与设备环境",
                             style = MaterialTheme.typography.labelSmall,
                             color = PtMuted,
                         )
@@ -183,6 +186,34 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                 )
             }
 
+            SectionCard(title = "NPU / Hexagon（Qualcomm QNN）") {
+                val qnnSoc = qnnStatus.soc
+                KeyValueRow(
+                    label = "SoC 检测",
+                    value = qnnSoc?.let { "${it.label} · HTP v${it.htpArch}" } ?: "不受支持",
+                    valueColor = if (qnnSoc != null) PtAccent else PtWarning,
+                )
+                KeyValueRow(label = "检测值", value = qnnStatus.detectedSoc)
+                KeyValueRow(
+                    label = "NPU 运行库",
+                    value = when {
+                        qnnStatus.ready -> "已就绪"
+                        qnnStatus.missingLibs.isNotEmpty() ->
+                            "缺少：${qnnStatus.missingLibs.joinToString("、")}"
+                        else -> "设备不受支持"
+                    },
+                    valueColor = if (qnnStatus.ready) PtAccent else PtError,
+                )
+                KeyValueRow(label = "sherpa-onnx", value = BuildConfig.SHERPA_ONNX_COMMIT)
+                KeyValueRow(label = "QNN", value = BuildConfig.QNN_VERSION)
+                KeyValueRow(label = "ONNX Runtime", value = BuildConfig.ONNXRUNTIME_VERSION)
+                Text(
+                    text = "NPU 推理运行在独立的 :npu 进程。QNN 运行库异常退出不会终止界面进程，自动模式会回退 Vulkan / CPU。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = PtMuted,
+                )
+            }
+
             SectionCard(title = "运行环境") {
                 KeyValueRow(label = "whisper.cpp", value = BuildConfig.WHISPER_CPP_VERSION)
                 KeyValueRow(label = "FFmpegKit", value = BuildConfig.FFMPEG_KIT_VERSION)
@@ -205,6 +236,21 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                 )
             }
 
+            SectionCard(title = "第三方组件与许可") {
+                KeyValueRow(label = "本应用", value = "GPLv3 · 源码随仓库提供")
+                KeyValueRow(label = "whisper.cpp", value = "MIT")
+                KeyValueRow(label = "sherpa-onnx", value = "Apache-2.0")
+                KeyValueRow(label = "ONNX Runtime", value = "MIT")
+                KeyValueRow(label = "Qualcomm QNN", value = "Qualcomm AI Hub Model License")
+                KeyValueRow(label = "FFmpegKit full-gpl", value = "GPLv3")
+                KeyValueRow(label = "Commons Compress", value = "Apache-2.0")
+                Text(
+                    text = "QNN 运行库由 sherpa-onnx 官方发布包再分发，仅用于在 Qualcomm Hexagon NPU 上运行按 SoC 预编译的模型。模型不随 APK 分发，首次下载时展示对应许可。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = PtMuted,
+                )
+            }
+
             OutlinedButton(
                 onClick = {
                     val report = buildString {
@@ -217,6 +263,14 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                         appendLine("内存：${formatBytes(memory.totalMem)} 总 / ${formatBytes(memory.availMem)} 可用")
                         appendLine("页大小：$pageLabel")
                         appendLine("Vulkan：base=$vulkanBase, 1.3=$vulkan13, compute=$vulkanCompute")
+                        appendLine(
+                            "NPU：soC=${qnnStatus.soc?.socModel ?: "unsupported"}, " +
+                                "htp=${qnnStatus.soc?.htpArch ?: "-"}, ready=${qnnStatus.ready}, " +
+                                "missing=${qnnStatus.missingLibs.joinToString(",")}",
+                        )
+                        appendLine("sherpa-onnx：${BuildConfig.SHERPA_ONNX_COMMIT}")
+                        appendLine("QNN：${BuildConfig.QNN_VERSION}")
+                        appendLine("ONNX Runtime：${BuildConfig.ONNXRUNTIME_VERSION}")
                         appendLine("whisper.cpp：${BuildConfig.WHISPER_CPP_VERSION}")
                         appendLine("FFmpegKit：${BuildConfig.FFMPEG_KIT_VERSION}")
                         appendLine("ggml 系统信息：$nativeInfo")

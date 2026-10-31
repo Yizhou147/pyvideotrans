@@ -29,7 +29,7 @@ jobs:
   build:
     name: Build subtitle APK
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
@@ -74,11 +74,21 @@ jobs:
             android/third_party/whisper.cpp
             android/third_party/Vulkan-Headers
             android/third_party/SPIRV-Headers
+            android/third_party/sherpa-onnx
+            android/third_party/qnn
+            android/third_party/onnxruntime
           key: native-src-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-native-deps.sh') }}
 
       - name: Fetch native dependencies
         working-directory: android
         run: ./scripts/fetch-native-deps.sh
+
+      - name: Build sherpa-onnx QNN JNI
+        working-directory: android
+        run: |
+          NDK_VERSION="${ANDROID_NDK}"
+          export ANDROID_NDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/ndk/${NDK_VERSION}"
+          ./scripts/build-sherpa-qnn.sh
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6

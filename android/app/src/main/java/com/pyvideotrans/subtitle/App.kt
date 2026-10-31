@@ -11,6 +11,12 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // The NPU worker process must not load whisper.cpp/Vulkan in addition
+        // to sherpa-onnx: that wastes memory and can conflict with QNN.
+        if (Application.getProcessName()?.endsWith(":npu") == true) {
+            return
+        }
+
         if (WhisperNative.isAvailable) {
             WhisperNative.setLogSink { level, message ->
                 val logLevel = when (level) {

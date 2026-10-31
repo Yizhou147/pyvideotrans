@@ -23,6 +23,9 @@ android {
 
         buildConfigField("String", "WHISPER_CPP_VERSION", "\"v1.9.5\"")
         buildConfigField("String", "FFMPEG_KIT_VERSION", "\"8.1.9\"")
+        buildConfigField("String", "SHERPA_ONNX_COMMIT", "\"935e5ded3d94\"")
+        buildConfigField("String", "QNN_VERSION", "\"2.40.0.251030\"")
+        buildConfigField("String", "ONNXRUNTIME_VERSION", "\"1.28.2\"")
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -81,6 +84,14 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    sourceSets {
+        getByName("main") {
+            // The sherpa-onnx Kotlin API is kept in sync with the pinned native
+            // commit instead of being copied into this repository.
+            java.srcDir(rootProject.projectDir.resolve("third_party/sherpa-onnx/sherpa-onnx/kotlin-api"))
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -95,7 +106,9 @@ android {
 
     packaging {
         jniLibs {
-            useLegacyPackaging = false
+            // QNN loads its DSP skeleton libraries from nativeLibraryDir and
+            // ADSP_LIBRARY_PATH, so the native libraries must be extracted.
+            useLegacyPackaging = true
             pickFirsts += "**/libc++_shared.so"
         }
     }
@@ -127,6 +140,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     implementation(libs.ffmpegkit.full.gpl)
+    implementation(libs.commons.compress)
 
     testImplementation(libs.junit)
     debugImplementation(libs.androidx.compose.ui.tooling)

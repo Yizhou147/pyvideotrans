@@ -4,6 +4,8 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.pyvideotrans.subtitle.data.asr.QnnStatus
+import com.pyvideotrans.subtitle.data.asr.QnnSupport
 import com.pyvideotrans.subtitle.data.model.LocalModel
 import com.pyvideotrans.subtitle.data.model.ModelRepository
 import com.pyvideotrans.subtitle.data.model.ModelSpec
@@ -22,6 +24,7 @@ data class DownloadState(
     val received: Long = 0L,
     val total: Long = 0L,
     val error: String? = null,
+    val phase: String? = null,
 ) {
     val fraction: Float?
         get() = if (total > 0L) (received.toDouble() / total.toDouble()).toFloat().coerceIn(0f, 1f) else null
@@ -41,17 +44,27 @@ class ModelsViewModel(application: Application) : AndroidViewModel(application) 
     private val _vadReady = MutableStateFlow(false)
     val vadReady: StateFlow<Boolean> = _vadReady.asStateFlow()
 
+    private val _onnxVadReady = MutableStateFlow(false)
+    val onnxVadReady: StateFlow<Boolean> = _onnxVadReady.asStateFlow()
+
+    private val _qnnInstalledIds = MutableStateFlow<Set<String>>(emptySet())
+    val qnnInstalledIds: StateFlow<Set<String>> = _qnnInstalledIds.asStateFlow()
+
     private val _importing = MutableStateFlow(false)
     val importing: StateFlow<Boolean> = _importing.asStateFlow()
 
     private val _importingVad = MutableStateFlow(false)
     val importingVad: StateFlow<Boolean> = _importingVad.asStateFlow()
 
+    private val _importingQnn = MutableStateFlow(false)
+    val importingQnn: StateFlow<Boolean> = _importingQnn.asStateFlow()
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
     val manifest = repository.manifest()
     val modelRootPath: String = repository.modelRoot.absolutePath
+    val qnnStatus: QnnStatus = QnnSupport.status(application)
 
     init {
         refresh()
@@ -60,6 +73,11 @@ class ModelsViewModel(application: Application) : AndroidViewModel(application) 
     fun refresh() {
         _models.value = repository.listAsrModels()
         _vadReady.value = repository.vadFile() != null
+        _onnxVadReady.value = repository.vadOnnxFile() != null
+        _qnnInstalledIds.value = manifest.models
+            .filter { it.isQnn && repository.isDownloaded(it) }
+            .map { it.id }
+            .toSet()
     }
 
     fun isDownloaded(spec: ModelSpec): Boolean = repository.isDownloaded(spec)
@@ -69,14 +87,29 @@ class ModelsViewModel(application: Application) : AndroidViewModel(application) 
         _message.value = null
         jobs[spec.id] = viewModelScope.launch(Dispatchers.IO) {
             _downloads.update {
-                it + (spec.id to DownloadState(received = 0L, total = spec.sizeBytes))
+                it + (spec.id to DownloadState(received = 0L, total = spec.sizeBytes, phase = "准备下载"))
             }
             try {
-                repository.download(spec) { received, total ->
-                    _downloads.update {
-                        it + (spec.id to DownloadState(received = received, total = total))
-                    }
-                }
+                repository.download(
+                    spec = spec,
+                    onProgress = { received, total ->
+                        _downloads.update { current ->
+                            val phase = current[spec.id]?.phase
+                            current + (spec.id to DownloadState(
+                                received = received,
+                                total = total,
+                                phase = phase,
+                            ))
+                        }
+                    },
+                    onPhase = { phase ->
+                        _downloads.update { current ->
+                            val previous = current[spec.id]
+                                ?: DownloadState(total = spec.sizeBytes)
+                            current + (spec.id to previous.copy(phase = phase))
+                        }
+                    },
+                )
                 _downloads.update { it - spec.id }
                 refresh()
             } catch (ce: CancellationException) {
@@ -148,6 +181,42 @@ class ModelsViewModel(application: Application) : AndroidViewModel(application) 
             } catch (t: Throwable) {
                 _message.value = t.message ?: "VAD 导入失败"
                 LogBus.error("model", "VAD 导入失败：${t.message}")
+            } finally {
+                _importingVad.value = false
+            }
+        }
+    }
+
+    fun importQnn(uri: Uri) {
+        if (_importingQnn.value) return
+        _importingQnn.value = true
+        _message.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val spec = repository.importQnn(uri)
+                _message.value = "已导入 NPU 模型：${spec.name}"
+                refresh()
+            } catch (t: Throwable) {
+                _message.value = t.message ?: "NPU 模型导入失败"
+                LogBus.error("model", "NPU 模型导入失败：${t.message}")
+            } finally {
+                _importingQnn.value = false
+            }
+        }
+    }
+
+    fun importVadOnnx(uri: Uri) {
+        if (_importingVad.value) return
+        _importingVad.value = true
+        _message.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val file = repository.importVadOnnx(uri)
+                _message.value = "已导入 NPU 语音切分模型：${file.name}"
+                refresh()
+            } catch (t: Throwable) {
+                _message.value = t.message ?: "Silero VAD ONNX 导入失败"
+                LogBus.error("model", "Silero VAD ONNX 导入失败：${t.message}")
             } finally {
                 _importingVad.value = false
             }

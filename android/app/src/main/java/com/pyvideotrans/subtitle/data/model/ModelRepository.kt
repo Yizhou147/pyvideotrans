@@ -2,6 +2,7 @@ package com.pyvideotrans.subtitle.data.model
 
 import android.content.Context
 import android.net.Uri
+import android.os.StatFs
 import android.provider.OpenableColumns
 import com.pyvideotrans.subtitle.util.LogBus
 import com.pyvideotrans.subtitle.util.formatBytes
@@ -11,6 +12,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import java.io.DataInputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -28,6 +31,10 @@ class ModelRepository(private val context: Context) {
     val modelRoot: File = File(context.filesDir, "models").apply { mkdirs() }
     val asrDir: File = File(modelRoot, "asr").apply { mkdirs() }
     val vadDir: File = File(modelRoot, "vad").apply { mkdirs() }
+    val vadOnnxDir: File = File(modelRoot, "vad-onnx").apply { mkdirs() }
+    val qnnDir: File = File(modelRoot, "qnn").apply { mkdirs() }
+    private val qnnArchiveDir: File = File(qnnDir, "archives").apply { mkdirs() }
+    private val qnnModelRoot: File = File(qnnDir, "models").apply { mkdirs() }
 
     private val manifestHolder: ModelManifest by lazy {
         val text = context.assets.open("models.json").bufferedReader().use { it.readText() }
@@ -37,21 +44,60 @@ class ModelRepository(private val context: Context) {
     fun manifest(): ModelManifest = manifestHolder
 
     fun fileFor(spec: ModelSpec): File {
-        val dir = if (spec.isVad) vadDir else asrDir
+        val dir = when {
+            spec.isVad -> vadDir
+            spec.isVadOnnx -> vadOnnxDir
+            spec.isQnn -> qnnArchiveDir
+            else -> asrDir
+        }
         return File(dir, spec.fileName)
     }
 
+    fun qnnModelDir(spec: ModelSpec): File = File(qnnModelRoot, spec.id)
+
+    fun qnnFiles(spec: ModelSpec): QnnModelFiles? {
+        if (!spec.isQnn) return null
+        val dir = qnnModelDir(spec)
+        val encoder = File(dir, "encoder.bin")
+        val decoder = File(dir, "decoder.bin")
+        val tokens = File(dir, "tokens.txt")
+        if (!encoder.isFile || !decoder.isFile || !tokens.isFile) return null
+        return QnnModelFiles(dir, encoder, decoder, tokens)
+    }
+
     fun isDownloaded(spec: ModelSpec): Boolean {
+        if (spec.isQnn) return qnnFiles(spec) != null
         val file = fileFor(spec)
         return file.isFile && file.length() == spec.sizeBytes
     }
 
-    fun downloadedSize(spec: ModelSpec): Long = fileFor(spec).takeIf { it.isFile }?.length() ?: 0L
+    fun downloadedSize(spec: ModelSpec): Long = if (spec.isQnn) {
+        qnnFiles(spec)?.let { dirSize(it.dir) } ?: fileFor(spec).length()
+    } else {
+        fileFor(spec).takeIf { it.isFile }?.length() ?: 0L
+    }
+
+    private fun dirSize(dir: File): Long =
+        dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
     fun vadFile(): File? {
         val spec = manifest().models.firstOrNull { it.isVad } ?: return null
         val file = fileFor(spec)
         return file.takeIf { it.isFile && it.length() > 0 }
+    }
+
+    fun vadOnnxFile(): File? {
+        val spec = manifest().models.firstOrNull { it.isVadOnnx } ?: return null
+        val file = fileFor(spec)
+        return file.takeIf { it.isFile && it.length() == spec.sizeBytes }
+    }
+
+    fun listQnnModels(soc: String): List<LocalQnnModel> {
+        return manifest().models
+            .filter { it.isQnn && it.soc.equals(soc, ignoreCase = true) }
+            .mapNotNull { spec ->
+                qnnFiles(spec)?.let { LocalQnnModel(spec, it.dir) }
+            }
     }
 
     fun listAsrModels(): List<LocalModel> {
@@ -83,20 +129,34 @@ class ModelRepository(private val context: Context) {
     suspend fun download(
         spec: ModelSpec,
         onProgress: (received: Long, total: Long) -> Unit,
+        onPhase: (String) -> Unit = {},
     ): File = withContext(Dispatchers.IO) {
-        val target = fileFor(spec)
-        if (target.isFile && target.length() == spec.sizeBytes) {
-            return@withContext target
+        if (isDownloaded(spec)) {
+            return@withContext if (spec.isQnn) qnnModelDir(spec) else fileFor(spec)
         }
         if (spec.urls.isEmpty()) {
             throw IOException("模型清单缺少下载地址")
+        }
+        if (spec.isQnn) {
+            val stat = StatFs(modelRoot.absolutePath)
+            val needed = spec.sizeBytes * 3
+            if (stat.availableBytes < needed) {
+                throw IOException(
+                    "存储空间不足：安装 NPU 模型约需 ${formatBytes(needed)}，可用 ${formatBytes(stat.availableBytes)}",
+                )
+            }
         }
 
         val failures = mutableListOf<String>()
         spec.urls.forEachIndexed { index, url ->
             try {
                 downloadFrom(url, spec, onProgress)
-                return@withContext target
+                if (spec.isQnn) {
+                    onPhase("校验并解压 NPU 模型")
+                    installQnn(spec)
+                    return@withContext qnnModelDir(spec)
+                }
+                return@withContext fileFor(spec)
             } catch (ce: CancellationException) {
                 throw ce
             } catch (t: Throwable) {
@@ -120,6 +180,10 @@ class ModelRepository(private val context: Context) {
         onProgress: (received: Long, total: Long) -> Unit,
     ) {
         val target = fileFor(spec)
+        if (target.isFile && target.length() == spec.sizeBytes) {
+            onProgress(target.length(), spec.sizeBytes)
+            return
+        }
         val part = File(target.parentFile, "${target.name}.part")
         if (part.isFile && part.length() == spec.sizeBytes) {
             if (sha256(part).equals(spec.sha256, ignoreCase = true)) {
@@ -271,6 +335,159 @@ class ModelRepository(private val context: Context) {
         }
     }
 
+    suspend fun importVadOnnx(uri: Uri): File = withContext(Dispatchers.IO) {
+        val spec = manifest().models.firstOrNull { it.isVadOnnx }
+            ?: throw IOException("模型清单中未配置 Silero VAD ONNX")
+        val target = fileFor(spec)
+        val temp = File(vadOnnxDir, "${target.name}.importing")
+
+        try {
+            copyUriTo(uri, temp)
+            if (temp.length() < 100_000L || temp.length() > 20_000_000L) {
+                throw IOException(
+                    "VAD ONNX 文件大小异常（${formatBytes(temp.length())}），请选择 silero_vad.onnx",
+                )
+            }
+            val digest = sha256(temp)
+            if (!digest.equals(spec.sha256, ignoreCase = true)) {
+                throw IOException("SHA-256 与清单不匹配，不是受支持的 Silero VAD ONNX 模型")
+            }
+            Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            LogBus.info("model", "已导入 Silero VAD ONNX (${formatBytes(target.length())})")
+            target
+        } finally {
+            if (temp.exists()) temp.delete()
+        }
+    }
+
+    suspend fun installQnn(spec: ModelSpec): File = withContext(Dispatchers.IO) {
+        if (!spec.isQnn) throw IOException("${spec.name} 不是 NPU 模型")
+        qnnFiles(spec)?.let { return@withContext it.dir }
+
+        val archive = fileFor(spec)
+        if (!archive.isFile) {
+            throw IOException("NPU 模型归档不存在，请下载 ${spec.fileName}")
+        }
+        if (archive.length() != spec.sizeBytes) {
+            throw IOException(
+                "NPU 模型归档大小不匹配：期望 ${formatBytes(spec.sizeBytes)}，实际 ${formatBytes(archive.length())}",
+            )
+        }
+        val digest = sha256(archive)
+        if (!digest.equals(spec.sha256, ignoreCase = true)) {
+            archive.delete()
+            throw IOException("NPU 模型归档 SHA-256 校验失败，请重新下载")
+        }
+
+        extractQnnArchive(spec, archive)
+        archive.delete()
+        LogBus.info("model", "已安装 NPU 模型 ${spec.name} (${formatBytes(dirSize(qnnModelDir(spec)))})")
+        qnnModelDir(spec)
+    }
+
+    suspend fun importQnn(uri: Uri): ModelSpec = withContext(Dispatchers.IO) {
+        val displayName = sanitizeFileName(queryDisplayName(uri))
+        val specs = manifest().models.filter { it.isQnn }
+        val byName = specs.firstOrNull { it.fileName.equals(displayName, ignoreCase = true) }
+        val temp = File(qnnArchiveDir, ".import-${System.nanoTime()}.tar.bz2")
+
+        try {
+            copyUriTo(uri, temp)
+            val digest = sha256(temp)
+            val spec = byName ?: specs.firstOrNull {
+                it.sizeBytes == temp.length() && it.sha256.equals(digest, ignoreCase = true)
+            } ?: throw IOException(
+                "未识别的 NPU 模型归档：$displayName。请选择与设备 SoC 对应的 .tar.bz2 文件",
+            )
+            if (!spec.sha256.equals(digest, ignoreCase = true)) {
+                throw IOException("SHA-256 与清单不匹配，文件可能不完整或已损坏")
+            }
+
+            val target = fileFor(spec)
+            Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            extractQnnArchive(spec, target)
+            target.delete()
+            LogBus.info("model", "已导入 NPU 模型 ${spec.name}")
+            spec
+        } finally {
+            if (temp.exists()) temp.delete()
+        }
+    }
+
+    private fun extractQnnArchive(spec: ModelSpec, archive: File) {
+        val staging = File(qnnModelRoot, ".extract-${spec.id}-${System.nanoTime()}").apply { mkdirs() }
+        var extractedBytes = 0L
+        try {
+            BZip2CompressorInputStream(archive.inputStream().buffered(), true).use { bzip ->
+                TarArchiveInputStream(bzip).use { tar ->
+                    while (true) {
+                        val entry = tar.nextTarEntry ?: break
+                        val name = entry.name
+                        if (name.isBlank()) continue
+                        if (name.startsWith("/") || name.split('/').any { it == ".." }) {
+                            throw IOException("NPU 模型归档包含非法路径：$name")
+                        }
+                        val output = File(staging, name)
+                        if (!output.canonicalPath.startsWith(staging.canonicalPath + File.separator)) {
+                            throw IOException("NPU 模型归档包含非法路径：$name")
+                        }
+                        when {
+                            entry.isDirectory -> output.mkdirs()
+                            entry.isFile -> {
+                                if (entry.size < 0L) {
+                                    throw IOException("NPU 模型归档条目无效：$name")
+                                }
+                                extractedBytes += entry.size
+                                if (extractedBytes > MAX_QNN_EXTRACTED_BYTES) {
+                                    throw IOException("NPU 模型解压后过大，已中止")
+                                }
+                                output.parentFile?.mkdirs()
+                                output.outputStream().buffered().use { sink ->
+                                    var remaining = entry.size
+                                    val buffer = ByteArray(64 * 1024)
+                                    while (remaining > 0L) {
+                                        val read = tar.read(
+                                            buffer,
+                                            0,
+                                            minOf(buffer.size.toLong(), remaining).toInt(),
+                                        )
+                                        if (read < 0) {
+                                            throw IOException("NPU 模型归档被截断：$name")
+                                        }
+                                        sink.write(buffer, 0, read)
+                                        remaining -= read
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            val encoder = staging.walkTopDown()
+                .firstOrNull { it.isFile && it.name == "encoder.bin" }
+                ?: throw IOException("NPU 模型归档中未找到 encoder.bin")
+            val sourceDir = encoder.parentFile
+                ?: throw IOException("NPU 模型归档目录无效")
+            val required = listOf("encoder.bin", "decoder.bin", "tokens.txt")
+            val missing = required.filterNot { File(sourceDir, it).isFile }
+            if (missing.isNotEmpty()) {
+                throw IOException("NPU 模型归档缺少文件：${missing.joinToString("、")}")
+            }
+
+            val target = qnnModelDir(spec)
+            target.deleteRecursively()
+            target.parentFile?.mkdirs()
+            if (!sourceDir.renameTo(target)) {
+                sourceDir.copyRecursively(target, overwrite = true)
+                sourceDir.deleteRecursively()
+            }
+            LogBus.info("model", "NPU 模型已解压到 ${target.absolutePath}")
+        } finally {
+            staging.deleteRecursively()
+        }
+    }
+
     private fun copyUriTo(uri: Uri, temp: File) {
         val input = context.contentResolver.openInputStream(uri)
             ?: throw IOException("无法读取所选文件")
@@ -293,6 +510,18 @@ class ModelRepository(private val context: Context) {
         }
 
     fun delete(spec: ModelSpec): Boolean {
+        if (spec.isQnn) {
+            val dir = qnnModelDir(spec)
+            val existed = dir.exists()
+            dir.deleteRecursively()
+            val archive = fileFor(spec)
+            File(archive.parentFile, "${archive.name}.part").delete()
+            archive.delete()
+            if (existed) {
+                LogBus.info("model", "已删除 ${spec.name}")
+            }
+            return existed
+        }
         val target = fileFor(spec)
         val part = File(target.parentFile, "${target.name}.part")
         part.delete()
@@ -360,5 +589,6 @@ class ModelRepository(private val context: Context) {
 
     private companion object {
         const val GGML_FILE_MAGIC = 0x67676d6c
+        const val MAX_QNN_EXTRACTED_BYTES = 6L * 1024 * 1024 * 1024
     }
 }

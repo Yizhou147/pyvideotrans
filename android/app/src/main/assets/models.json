@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "models": [
     {
       "id": "whisper-large-v3-turbo-q5_0",
@@ -44,6 +44,132 @@
       "description": "最小体积，仅用于流程验证和低内存设备，正式字幕不建议使用。"
     },
     {
+      "id": "qnn-sm8850-whisper-tiny",
+      "kind": "qnn",
+      "soc": "SM8850",
+      "name": "NPU Whisper Tiny · 8 Elite Gen 5",
+      "fileName": "sherpa-onnx-qnn-SM8850-binary-whisper-tiny.tar.bz2",
+      "sizeBytes": 103743186,
+      "sha256": "af214b0fcb7681bdba6439f4d082a85f8b0ba5f6bec1910d479e80b109d669ab",
+      "urls": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models-qnn-binary-2/sherpa-onnx-qnn-SM8850-binary-whisper-tiny.tar.bz2"
+      ],
+      "license": "MIT",
+      "description": "交给骁龙 8 Elite Gen 5 的 Hexagon NPU 运行。体积最小、速度最快，中文准确率有限，适合先验证 NPU 是否工作。"
+    },
+    {
+      "id": "qnn-sm8850-whisper-small",
+      "kind": "qnn",
+      "soc": "SM8850",
+      "name": "NPU Whisper Small · 8 Elite Gen 5",
+      "fileName": "sherpa-onnx-qnn-SM8850-binary-whisper-small.tar.bz2",
+      "sizeBytes": 507154196,
+      "sha256": "515fc9d8815d42ba48891037d8daabcf7de5ae266ae1e0c012299a0aa5d998d3",
+      "urls": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models-qnn-binary-2/sherpa-onnx-qnn-SM8850-binary-whisper-small.tar.bz2"
+      ],
+      "license": "MIT",
+      "description": "NPU 默认推荐。质量与速度平衡，适合 12GB 及以上内存的骁龙 8 Elite Gen 5 设备。"
+    },
+    {
+      "id": "qnn-sm8850-whisper-medium",
+      "kind": "qnn",
+      "soc": "SM8850",
+      "name": "NPU Whisper Medium · 8 Elite Gen 5",
+      "fileName": "sherpa-onnx-qnn-SM8850-binary-whisper-medium.tar.bz2",
+      "sizeBytes": 1478318775,
+      "sha256": "011d46fda4918d351b4f63f285cc4b4cdf220de7a547b3185d2af361ad4060dd",
+      "urls": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models-qnn-binary-2/sherpa-onnx-qnn-SM8850-binary-whisper-medium.tar.bz2"
+      ],
+      "license": "MIT",
+      "description": "NPU 最高质量，体积约 1.4GB，需要 12GB 以上内存，识别速度明显慢于 Small。"
+    },
+    {
+      "id": "qnn-sm8750-whisper-tiny",
+      "kind": "qnn",
+      "soc": "SM8750",
+      "name": "NPU Whisper Tiny · 8 Elite",
+      "fileName": "sherpa-onnx-qnn-SM8750-binary-whisper-tiny.tar.bz2",
+      "sizeBytes": 103727907,
+      "sha256": "d19d72a430a00756c0c09e5f3ba8f0261338dec1e24d0574ee497dc09c37999e",
+      "urls": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models-qnn-binary-2/sherpa-onnx-qnn-SM8750-binary-whisper-tiny.tar.bz2"
+      ],
+      "license": "MIT",
+      "description": "交给骁龙 8 Elite 的 Hexagon NPU 运行。体积最小、速度最快，适合先验证 NPU 是否工作。"
+    },
+    {
+      "id": "qnn-sm8750-whisper-small",
+      "kind": "qnn",
+      "soc": "SM8750",
+      "name": "NPU Whisper Small · 8 Elite",
+      "fileName": "sherpa-onnx-qnn-SM8750-binary-whisper-small.tar.bz2",
+      "sizeBytes": 507088655,
+      "sha256": "a38ccc457e9c4c861bfc4b368641f72e8ded4ca381376bedf4d717dd7fc79aeb",
+      "urls": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models-qnn-binary-2/sherpa-onnx-qnn-SM8750-binary-whisper-small.tar.bz2"
+      ],
+      "license": "MIT",
+      "description": "NPU 默认推荐。质量与速度平衡，适合 12GB 及以上内存的骁龙 8 Elite 设备。"
+    },
+    {
+      "id": "qnn-sm8750-whisper-medium",
+      "kind": "qnn",
+      "soc": "SM8750",
+      "name": "NPU Whisper Medium · 8 Elite",
+      "fileName": "sherpa-onnx-qnn-SM8750-binary-whisper-medium.tar.bz2",
+      "sizeBytes": 1477526214,
+      "sha256": "c4e3ce5707cb2b76aca8c256713add9c5c07d89599374c987879f27c8227cb85",
+      "urls": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models-qnn-binary-2/sherpa-onnx-qnn-SM8750-binary-whisper-medium.tar.bz2"
+      ],
+      "license": "MIT",
+      "description": "NPU 最高质量，体积约 1.4GB，需要 12GB 以上内存，识别速度明显慢于 Small。"
+    },
+    {
+      "id": "qnn-sm8650-whisper-tiny",
+      "kind": "qnn",
+      "soc": "SM8650",
+      "name": "NPU Whisper Tiny · 8 Gen 3",
+      "fileName": "sherpa-onnx-qnn-SM8650-binary-whisper-tiny.tar.bz2",
+      "sizeBytes": 103561425,
+      "sha256": "c35fd79c9dbd4938e6d46d871cc60d9ff90de2e268b3dbc9fd0088db78638c07",
+      "urls": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models-qnn-binary-2/sherpa-onnx-qnn-SM8650-binary-whisper-tiny.tar.bz2"
+      ],
+      "license": "MIT",
+      "description": "交给骁龙 8 Gen 3 的 Hexagon NPU 运行。体积最小、速度最快，适合先验证 NPU 是否工作。"
+    },
+    {
+      "id": "qnn-sm8650-whisper-small",
+      "kind": "qnn",
+      "soc": "SM8650",
+      "name": "NPU Whisper Small · 8 Gen 3",
+      "fileName": "sherpa-onnx-qnn-SM8650-binary-whisper-small.tar.bz2",
+      "sizeBytes": 506498570,
+      "sha256": "44e184c79b0e821b1a02fad13a8845508469893e48f3659679cd9f9a877c3413",
+      "urls": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models-qnn-binary-2/sherpa-onnx-qnn-SM8650-binary-whisper-small.tar.bz2"
+      ],
+      "license": "MIT",
+      "description": "NPU 默认推荐。质量与速度平衡，适合 12GB 及以上内存的骁龙 8 Gen 3 设备。"
+    },
+    {
+      "id": "qnn-sm8650-whisper-medium",
+      "kind": "qnn",
+      "soc": "SM8650",
+      "name": "NPU Whisper Medium · 8 Gen 3",
+      "fileName": "sherpa-onnx-qnn-SM8650-binary-whisper-medium.tar.bz2",
+      "sizeBytes": 1477121632,
+      "sha256": "10396b817bfbf4472a9c74ff0dc84516bfcabf57a4b5469edfd4695267adf74b",
+      "urls": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models-qnn-binary-2/sherpa-onnx-qnn-SM8650-binary-whisper-medium.tar.bz2"
+      ],
+      "license": "MIT",
+      "description": "NPU 最高质量，体积约 1.4GB，需要 12GB 以上内存，识别速度明显慢于 Small。"
+    },
+    {
       "id": "silero-vad-v6.2.0",
       "kind": "vad",
       "name": "Silero VAD v6.2.0",
@@ -56,6 +182,19 @@
       ],
       "license": "MIT",
       "description": "语音活动检测模型，用于跳过静音、减少幻听。建议始终启用。"
+    },
+    {
+      "id": "silero-vad-onnx-v5",
+      "kind": "vad-onnx",
+      "name": "Silero VAD ONNX",
+      "fileName": "silero_vad.onnx",
+      "sizeBytes": 643854,
+      "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+      "urls": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx"
+      ],
+      "license": "MIT",
+      "description": "NPU 识别使用的语音分段模型。NPU 模式必须安装，用于把长音频切成 30 秒以内的片段。"
     }
   ]
 }
