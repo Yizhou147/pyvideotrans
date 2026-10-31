@@ -1,6 +1,7 @@
 package com.pyvideotrans.subtitle.data.model
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.net.Uri
 import android.os.StatFs
 import android.provider.OpenableColumns
@@ -28,6 +29,9 @@ class ModelRepository(private val context: Context) {
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    private val prefs: SharedPreferences =
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
     val modelRoot: File = File(context.filesDir, "models").apply { mkdirs() }
     val asrDir: File = File(modelRoot, "asr").apply { mkdirs() }
     val vadDir: File = File(modelRoot, "vad").apply { mkdirs() }
@@ -42,6 +46,23 @@ class ModelRepository(private val context: Context) {
     }
 
     fun manifest(): ModelManifest = manifestHolder
+
+    /**
+     * Optional user-supplied download accelerator prefix. Domestic networks often
+     * cannot reach github.com, so the prefix wraps the original URL and is tried
+     * first.
+     */
+    var mirrorPrefix: String
+        get() = prefs.getString(KEY_MIRROR_PREFIX, "").orEmpty()
+        set(value) {
+            prefs.edit().putString(KEY_MIRROR_PREFIX, value.trim()).apply()
+        }
+
+    fun candidateUrls(spec: ModelSpec, mirror: String = mirrorPrefix): List<String> {
+        val candidates = LinkedHashSet<String>()
+        spec.urls.forEach { candidates += resolveModelUrl(it, mirror) }
+        return candidates.toList()
+    }
 
     fun fileFor(spec: ModelSpec): File {
         val dir = when {
@@ -148,7 +169,8 @@ class ModelRepository(private val context: Context) {
         }
 
         val failures = mutableListOf<String>()
-        spec.urls.forEachIndexed { index, url ->
+        val urls = candidateUrls(spec)
+        urls.forEachIndexed { index, url ->
             try {
                 downloadFrom(url, spec, onProgress)
                 if (spec.isQnn) {
@@ -164,13 +186,14 @@ class ModelRepository(private val context: Context) {
                 val reason = t.message ?: t.javaClass.simpleName
                 failures += "$host：$reason"
                 LogBus.warn("model", "从 $host 下载 ${spec.name} 失败：$reason")
-                if (index < spec.urls.lastIndex) {
-                    LogBus.info("model", "改用备用地址 ${hostOf(spec.urls[index + 1])}")
+                if (index < urls.lastIndex) {
+                    LogBus.info("model", "改用备用地址 ${hostOf(urls[index + 1])}")
                 }
             }
         }
         throw IOException(
-            "下载失败（${failures.joinToString("；")}）。可在电脑下载 ${spec.fileName} 后通过“导入模型”安装。",
+            "下载失败（${failures.joinToString("；")}）。可在电脑下载 ${spec.fileName} 后通过“导入模型”安装，" +
+                "或在“下载镜像”里填写可用的加速前缀。",
         )
     }
 
@@ -590,5 +613,27 @@ class ModelRepository(private val context: Context) {
     private companion object {
         const val GGML_FILE_MAGIC = 0x67676d6c
         const val MAX_QNN_EXTRACTED_BYTES = 6L * 1024 * 1024 * 1024
+        const val PREFS_NAME = "model_prefs"
+        const val KEY_MIRROR_PREFIX = "mirror_prefix"
     }
+}
+
+private val GITHUB_PROXIES = listOf(
+    "https://gh-proxy.com",
+    "https://ghproxy.net",
+)
+
+/**
+ * Download addresses for one manifest URL: the user's own accelerator prefix
+ * first, then the built-in GitHub proxies, then the original address.
+ */
+internal fun resolveModelUrl(url: String, mirror: String): List<String> {
+    val result = LinkedHashSet<String>()
+    val prefix = mirror.trim().removeSuffix("/")
+    if (prefix.isNotBlank()) result += "$prefix/$url"
+    if (url.startsWith("https://github.com/")) {
+        GITHUB_PROXIES.forEach { result += "$it/$url" }
+    }
+    result += url
+    return result.toList()
 }

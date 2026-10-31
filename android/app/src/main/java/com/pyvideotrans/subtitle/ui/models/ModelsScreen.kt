@@ -18,10 +18,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -42,6 +44,7 @@ import com.pyvideotrans.subtitle.ui.components.SectionCard
 import com.pyvideotrans.subtitle.ui.components.SectionDivider
 import com.pyvideotrans.subtitle.ui.theme.PtAccent
 import com.pyvideotrans.subtitle.ui.theme.PtBackground
+import com.pyvideotrans.subtitle.ui.theme.PtBorder
 import com.pyvideotrans.subtitle.ui.theme.PtError
 import com.pyvideotrans.subtitle.ui.theme.PtMuted
 import com.pyvideotrans.subtitle.ui.theme.PtProgress
@@ -348,6 +351,8 @@ fun ModelsScreen(
                 }
             }
 
+            MirrorCard(viewModel)
+
             Text(
                 text = "模型目录：${viewModel.modelRootPath}",
                 style = MaterialTheme.typography.labelSmall,
@@ -379,6 +384,58 @@ fun ModelsScreen(
             dismissButton = {
                 TextButton(onClick = { pendingDelete = null }) { Text("取消") }
             },
+        )
+    }
+}
+
+@Composable
+private fun MirrorCard(viewModel: ModelsViewModel) {
+    val saved by viewModel.mirrorPrefix.collectAsState()
+    var input by remember(saved) { mutableStateOf(saved) }
+
+    SectionCard(title = "下载镜像") {
+        Text(
+            text = "github.com 直连失败时，可填写加速前缀。填写 https://gh-proxy.com 后，实际请求变成" +
+                "前缀 + 原始地址；留空则使用内置备用地址。",
+            style = MaterialTheme.typography.bodySmall,
+            color = PtMuted,
+        )
+        OutlinedTextField(
+            value = input,
+            onValueChange = { input = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            placeholder = { Text("例如 https://gh-proxy.com") },
+            textStyle = MaterialTheme.typography.bodySmall,
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = PtBackground,
+                unfocusedContainerColor = PtBackground,
+                focusedTextColor = PtText,
+                unfocusedTextColor = PtText,
+                cursorColor = PtAccent,
+                focusedBorderColor = PtAccent,
+                unfocusedBorderColor = PtBorder,
+            ),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { viewModel.setMirrorPrefix(input) },
+                enabled = input.trim() != saved.trim(),
+            ) {
+                Text("保存")
+            }
+            if (saved.isNotBlank()) {
+                OutlinedButton(onClick = { viewModel.setMirrorPrefix("") }) { Text("清空") }
+            }
+        }
+        Text(
+            text = if (saved.isBlank()) {
+                "当前未设置自定义镜像，会依次尝试内置加速地址与 github.com。"
+            } else {
+                "当前镜像：$saved"
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = if (saved.isBlank()) PtMuted else PtAccent,
         )
     }
 }

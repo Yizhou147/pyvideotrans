@@ -62,9 +62,22 @@ class ModelsViewModel(application: Application) : AndroidViewModel(application) 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    private val _mirrorPrefix = MutableStateFlow(repository.mirrorPrefix)
+    val mirrorPrefix: StateFlow<String> = _mirrorPrefix.asStateFlow()
+
     val manifest = repository.manifest()
     val modelRootPath: String = repository.modelRoot.absolutePath
     val qnnStatus: QnnStatus = QnnSupport.status(application)
+
+    fun setMirrorPrefix(value: String) {
+        repository.mirrorPrefix = value
+        _mirrorPrefix.value = repository.mirrorPrefix
+        val urls = repository.candidateUrls(manifest.models.first { it.isQnn })
+        LogBus.info("model", "下载镜像已更新，优先尝试 ${urls.firstOrNull().let { hostOrSelf(it) }}")
+    }
+
+    private fun hostOrSelf(url: String?): String =
+        url?.let { runCatching { java.net.URL(it).host }.getOrNull() } ?: "内置地址"
 
     init {
         refresh()
