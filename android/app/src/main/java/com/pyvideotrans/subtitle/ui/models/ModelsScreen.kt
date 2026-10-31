@@ -413,8 +413,8 @@ private fun MirrorCard(viewModel: ModelsViewModel) {
                 focusedTextColor = PtText,
                 unfocusedTextColor = PtText,
                 cursorColor = PtAccent,
-                focusedBorderColor = PtAccent,
-                unfocusedBorderColor = PtBorder,
+                focusedIndicatorColor = PtAccent,
+                unfocusedIndicatorColor = PtBorder,
             ),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
