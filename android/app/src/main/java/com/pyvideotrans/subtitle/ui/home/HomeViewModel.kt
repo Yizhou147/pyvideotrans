@@ -12,6 +12,7 @@ import com.pyvideotrans.subtitle.data.asr.QnnRequest
 import com.pyvideotrans.subtitle.data.asr.QnnStatus
 import com.pyvideotrans.subtitle.data.asr.QnnSupport
 import com.pyvideotrans.subtitle.data.asr.TranscriptionOutcome
+import com.pyvideotrans.subtitle.data.asr.TranscriptionResult
 import com.pyvideotrans.subtitle.data.asr.WhisperCppEngine
 import com.pyvideotrans.subtitle.data.asr.WhisperNative
 import com.pyvideotrans.subtitle.data.media.MediaRepository
@@ -19,8 +20,10 @@ import com.pyvideotrans.subtitle.data.model.LocalModel
 import com.pyvideotrans.subtitle.data.model.LocalQnnModel
 import com.pyvideotrans.subtitle.data.model.ModelRepository
 import com.pyvideotrans.subtitle.util.LogBus
+import com.pyvideotrans.subtitle.util.ZhVariants
 import com.pyvideotrans.subtitle.util.formatDurationMs
 import com.pyvideotrans.subtitle.util.formatTimestampMs
+import com.pyvideotrans.subtitle.util.languageIsChinese
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -56,6 +59,7 @@ data class HomeUiState(
     val vadReady: Boolean = false,
     val threads: Int = 4,
     val language: String = "auto",
+    val simplified: Boolean = true,
     val running: Boolean = false,
     val phase: String = "待命",
     val progress: Int? = null,
@@ -144,6 +148,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 vadReady = modelRepository.vadFile() != null,
                 threads = prefs.getInt(KEY_THREADS, DEFAULT_THREADS).coerceIn(1, 8),
                 language = prefs.getString(KEY_LANGUAGE, "auto") ?: "auto",
+                simplified = prefs.getBoolean(KEY_SIMPLIFIED, true),
             )
         }
     }
@@ -199,8 +204,39 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(language = language) }
     }
 
+    fun setSimplified(enabled: Boolean) {
+        if (_state.value.running) return
+        prefs.edit().putBoolean(KEY_SIMPLIFIED, enabled).apply()
+        _state.update { it.copy(simplified = enabled) }
+    }
+
     fun dismissMessage() {
         _state.update { it.copy(message = null) }
+    }
+
+    /**
+     * Whisper writes Traditional characters for much Chinese audio, and the QNN
+     * binaries cannot be biased with a prompt, so the text is normalised here the
+     * way the desktop app does it. Segments that are already Simplified are left
+     * alone.
+     */
+    private fun simplifyToHans(result: TranscriptionResult): TranscriptionResult {
+        val app = getApplication<Application>()
+        var changed = 0
+        val segments = result.segments.map { segment ->
+            val converted = ZhVariants.toSimplified(app, segment.text)
+            if (converted == segment.text) {
+                segment
+            } else {
+                changed++
+                segment.copy(text = converted)
+            }
+        }
+        LogBus.info(
+            "subtitle",
+            if (changed > 0) "繁体已转简体：$changed/${result.segments.size} 条" else "识别结果已是简体",
+        )
+        return result.copy(segments = segments)
     }
 
     fun start() {
@@ -440,7 +476,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 ensureActive()
                 if (cancelRequested) throw CancellationException("已取消")
 
-                val result = finalOutcome.result
+                val rawResult = finalOutcome.result
+                val result = if (snapshot.simplified &&
+                    languageIsChinese(rawResult.language, snapshot.language)
+                ) {
+                    withContext(Dispatchers.Default) { simplifyToHans(rawResult) }
+                } else {
+                    rawResult
+                }
                 val audioMs = result.audioMs
                 val rtf = if (audioMs > 0) finalOutcome.elapsedMs.toDouble() / audioMs else 0.0
                 val languageLabel = when (result.language) {
@@ -609,6 +652,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         const val KEY_BACKEND = "asr_backend"
         const val KEY_THREADS = "threads"
         const val KEY_LANGUAGE = "language"
+        const val KEY_SIMPLIFIED = "zh_hans"
         val DEFAULT_THREADS = Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
     }
 }

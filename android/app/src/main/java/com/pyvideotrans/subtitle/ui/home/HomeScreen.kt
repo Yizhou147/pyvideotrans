@@ -30,6 +30,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -422,6 +423,24 @@ private fun SettingsCard(
                 text = "自动检测适合多语种；固定中文可提高中文稳定性。NPU 支持自动、中、英、日、韩。",
                 style = MaterialTheme.typography.labelSmall,
                 color = PtMuted,
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "繁体自动转简体",
+                style = MaterialTheme.typography.bodyMedium,
+                color = PtText,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = state.simplified,
+                onCheckedChange = viewModel::setSimplified,
+                enabled = !state.running,
             )
         }
 

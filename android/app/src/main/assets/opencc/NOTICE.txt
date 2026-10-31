@@ -1,0 +1,9 @@
+opencc/t2s.tsv —— 繁转简词典
+
+来源：OpenCC https://github.com/BYVoid/OpenCC （Apache-2.0，见 ../licenses/OpenCC-LICENSE.txt）
+由 data/dictionary/TSPhrases.txt 与 data/dictionary/TSCharacters.txt 合并生成：
+  · 每行「繁体<TAB>简体」，多候选时取第一个；
+  · 保留恒等词组（如 乾隆→乾隆）作为保护项，避免单字规则误转；
+  · 丢弃单字恒等项。共 3719 条，最长键 10 字。
+生成脚本与 OpenCC 版本号见仓库提交记录。
+生成时的 OpenCC 提交：fae2a0a911c3（master）
