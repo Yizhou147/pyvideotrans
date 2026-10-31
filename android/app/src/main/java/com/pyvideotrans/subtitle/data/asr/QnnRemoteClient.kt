@@ -90,7 +90,11 @@ class QnnRemoteClient(private val context: Context) {
                 if (resultFile.isFile) {
                     resumeFromResult()
                 } else {
-                    continuation.resumeWithException(QnnProcessDiedException(message))
+                    // QNN aborts with exit() on any backend error, so the only
+                    // clue left behind is the dying process' own logcat lines.
+                    val tail = readNativeLogTail()
+                    val detail = if (tail.isBlank()) message else "$message 底层日志：$tail"
+                    continuation.resumeWithException(QnnProcessDiedException(detail))
                 }
             }
 
@@ -207,3 +211,32 @@ class QnnRemoteClient(private val context: Context) {
         val json = Json { ignoreUnknownKeys = true }
     }
 }
+
+private val NATIVE_LOG_MARKERS = listOf(
+    "QnnAsrService",
+    "sherpa-onnx",
+    "QNN",
+    "HTP",
+    "cdsprpc",
+    "fastrpc",
+    "onnxruntime",
+    "UnsatisfiedLink",
+    "AndroidRuntime",
+    "FATAL",
+    "libc",
+    "DEBUG",
+)
+
+private fun readNativeLogTail(): String = runCatching {
+    val process = Runtime.getRuntime().exec(
+        arrayOf("logcat", "-d", "-v", "brief", "-t", "400"),
+    )
+    val text = process.inputStream.bufferedReader().use { it.readText() }
+    process.waitFor()
+    text.lineSequence()
+        .map { it.trim() }
+        .filter { line -> NATIVE_LOG_MARKERS.any { line.contains(it, ignoreCase = true) } }
+        .takeLast(8)
+        .joinToString(" / ")
+        .take(700)
+}.getOrDefault("")

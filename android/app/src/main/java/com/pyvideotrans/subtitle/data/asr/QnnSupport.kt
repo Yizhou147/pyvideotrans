@@ -40,6 +40,7 @@ enum class QnnSoc(
     );
 
     val skelName: String get() = "libQnnHtpV${htpArch}Skel.so"
+    val stubName: String get() = "libQnnHtpV${htpArch}Stub.so"
     val priority: Int get() = ordinal
 
     fun matches(raw: String): Boolean {
@@ -102,7 +103,10 @@ object QnnSupport {
         val nativeDir = File(context.applicationInfo.nativeLibraryDir)
         val required = buildList {
             addAll(REQUIRED_RUNTIME_LIBS)
-            if (soc != null) add(soc.skelName)
+            if (soc != null) {
+                add(soc.skelName)
+                add(soc.stubName)
+            }
         }
         val missing = required.filterNot { File(nativeDir, it).isFile }
         val detected = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

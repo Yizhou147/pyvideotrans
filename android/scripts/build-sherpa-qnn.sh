@@ -123,13 +123,17 @@ for name in "${qnn_common[@]}"; do
     fi
 done
 
+# The HTP backend needs both halves of the FastRPC pair: the Skel image runs on
+# the DSP (found through ADSP_LIBRARY_PATH) while the Stub is dlopen'ed by
+# libQnnHtp.so on the app side. Missing the Stub aborts backend/device creation.
 for arch in $QNN_HTP_ARCHS; do
-    skel="libQnnHtpV${arch}Skel.so"
-    if [[ -f "$QNN_LIBS_DIR/$skel" ]]; then
-        cp "$QNN_LIBS_DIR/$skel" "$JNI_LIBS_DIR/"
-    else
-        log "warning: $skel is not present in the QNN runtime package"
-    fi
+    for lib in "libQnnHtpV${arch}Skel.so" "libQnnHtpV${arch}Stub.so"; do
+        if [[ -f "$QNN_LIBS_DIR/$lib" ]]; then
+            cp "$QNN_LIBS_DIR/$lib" "$JNI_LIBS_DIR/"
+        else
+            log "warning: $lib is not present in the QNN runtime package"
+        fi
+    done
 done
 
 if [[ ! -f "$JNI_LIBS_DIR/libQnnHtp.so" ]]; then
