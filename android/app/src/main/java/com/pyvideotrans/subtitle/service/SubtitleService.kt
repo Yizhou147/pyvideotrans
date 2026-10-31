@@ -60,7 +60,10 @@ class SubtitleService : Service() {
 
     /** A denied notification permission must not stop the job, nor the service ending. */
     private fun postNotification(phase: String, progress: Int?) {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+        // The permission only exists from Android 13 on; asking the older platforms about it
+        // answers "denied", which would silently freeze the notification at its first text.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             return
