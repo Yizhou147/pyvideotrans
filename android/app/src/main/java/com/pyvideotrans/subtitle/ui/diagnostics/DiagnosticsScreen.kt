@@ -237,20 +237,7 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
                 )
             }
 
-            SectionCard(title = "第三方组件与许可") {
-                KeyValueRow(label = "本应用", value = "GPLv3 · 源码随仓库提供")
-                KeyValueRow(label = "whisper.cpp", value = "MIT")
-                KeyValueRow(label = "sherpa-onnx", value = "Apache-2.0")
-                KeyValueRow(label = "ONNX Runtime", value = "MIT")
-                KeyValueRow(label = "Qualcomm QNN", value = "Qualcomm AI Hub Model License")
-                KeyValueRow(label = "FFmpegKit full-gpl", value = "GPLv3")
-                KeyValueRow(label = "Commons Compress", value = "Apache-2.0")
-                Text(
-                    text = "QNN 运行库由 sherpa-onnx 官方发布包再分发，仅用于在 Qualcomm Hexagon NPU 上运行按 SoC 预编译的模型。模型不随 APK 分发，首次下载时展示对应许可。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = PtMuted,
-                )
-            }
+            LicensesCard()
 
             OutlinedButton(
                 onClick = {

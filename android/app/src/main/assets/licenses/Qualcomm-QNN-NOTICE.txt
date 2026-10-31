@@ -1,0 +1,69 @@
+Qualcomm QNN 运行库 —— 使用与再分发声明（必须随 APK 保留）
+
+一、涉及哪些文件
+
+随 APK 打包的 Qualcomm AI Engine Direct（QNN）运行时，版本 2.40.0.251030，
+构建时由 android/scripts/build-sherpa-qnn.sh 从下列 tar.bz2 中取出并放入 jniLibs：
+
+  · libQnnHtp.so
+  · libQnnSystem.so
+  · libQnnHtpNetRunExtensions.so
+  · libQnnHtpGraphFinalizeExtensions.so
+  · libQnnHtpPrepareExtensions.so
+  · libQnnHtpV75Skel.so / libQnnHtpV75Stub.so（Snapdragon 8 Gen 3 / SM8650）
+  · libQnnHtpV79Skel.so / libQnnHtpV79Stub.so（Snapdragon 8 Elite / SM8750）
+  · libQnnHtpV81Skel.so / libQnnHtpV81Stub.so（Snapdragon 8 Elite Gen 5 / SM8850）
+
+  未打包 libQnnHtpPrepare.so（约 74 MB，只有现场构图才需要）；模型以预编译
+  context binary 下发。
+
+获取来源（sherpa-onnx 项目代为重新发布，无需 Qualcomm 账号）：
+  https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models-qnn
+  qnn-include-2.40.0.251030.tar.bz2  sha256 fafe1c9dc3f60393134f22f2c708a9ede287492fa20dedc22c9fabdcf5ebe70d
+  qnn-libs-2.40.0.251030.tar.bz2     sha256 1078c0833b1e948518ff433e081eda511475c7fd9a82c7798a862f59b95a7ce5
+
+二、适用许可
+
+上述运行库不是开源软件，受 Innovation Center（QuIC）发布的
+「TERMS AND CONDITIONS OF USE — AI Model Hub License」约束。
+官方正文（PDF，v1）：
+  https://softwarecenter.qualcomm.com/api/download/software/licenses/ai_model_hub/v1/LICENSE.pdf
+  （本地核对版本 sha256 2d20d88391972aa355c2d2ac0d03e7d4805b9a1c2398649d861c7dfd10dd5f83，171533 字节）
+
+本文件只作摘录与指引，正文才是准据；两者冲突时以 PDF 为准。
+
+三、与本应用直接相关的条款要点
+
+1. 授予的权限里包含：以目标码（object code）形式分发、再许可该运行库，
+   但**仅限于已嵌入你的应用程序之中**。本应用正是这样使用它——只在 :npu 进程里
+   调用它做 Whisper 识别，不提供任何下载/导出该运行库的入口。
+2. 明确**不授予**单独（standalone）分发或再许可该运行库的权利：
+   因此本仓库不把 QNN 的 .so 提交进 git，CI 产物之外的任何地方也不得转发这些二进制；
+   不得把它们打包成独立的库集合、SDK、Docker 镜像或模型包发布。
+3. 不得对目标码逆向工程、反编译。
+4. 不得移除或修改二进制内的版权声明与专有声明。
+5. 使用者需自行负责遵守其它第三方许可（本清单见同目录 NOTICE.txt）。
+6. 责任上限 US$100，且需就你的开发、使用与分发对 QuIC 作赔偿承诺。
+7. 违反条款即许可终止，终止后须删除全部副本。
+8. 含出口管制条款（美国 EAR 15 CFR 730–774、OFAC 31 CFR 500–599）；
+   准据法为加州法律，专属管辖地为加州圣迭戈县。
+
+四、与 GPLv3 的关系（本项目的处理方式）
+
+本应用按 GPLv3 发布，而 QNN 运行库是专有、不可再单独分发的目标码。为使「GPL 应用
++ 专有运行库」的组合作品仍可自由再分发，本项目的做法是：
+
+  · QNN 运行库只在构建时下载、只存在于生成的 APK 里，源码仓库不含该二进制；
+  · 该运行库对本应用不产生任何源码形式，也不构成应用的「对应源码」的一部分；
+  · 应用通过 dlopen/裸名链接在运行时加载它，删除或替换它后应用仍能以 Vulkan GPU
+    或 CPU 后端完整工作（NPU 是可选项，不是必需组件）；
+  · 分发 APK 时一并保留本文件与 NOTICE.txt，接收者据以知悉 QNN 部分的条款。
+
+若将来出现「无法合法随 APK 再分发 QNN 运行库」的结论，回退方案是把 NPU 路径做成
+需要用户自行接受 QuIC 条款后拉取的可选附加包，标准 APK 只保留 GPU/CPU。
+该取舍一旦变化必须同步更新本文件。
+
+五、模型侧
+
+NPU 的 Whisper context binary 由 MIT 许可的 Whisper 权重离线编译得到，模型部分仍为
+MIT；它不包含 QuIC 的版权代码，但**必须**配合上述专有运行库才能执行。

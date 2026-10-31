@@ -25,8 +25,9 @@ SHERPA_COMMIT="${SHERPA_COMMIT:-935e5ded3d949a8b557ac44ef4dad03a7d2038e7}"
 SHERPA_REPO="${SHERPA_REPO:-https://github.com/k2-fsa/sherpa-onnx.git}"
 
 # Qualcomm QNN headers/runtime are republished by the sherpa-onnx project so a
-# Qualcomm account is not needed to build. The runtime is redistributed under
-# the Qualcomm AI Hub Model License; see assets/licenses.
+# Qualcomm account is not needed to build. The runtime is proprietary: it may
+# only be shipped as object code inside the app, never on its own. Terms and the
+# component inventory live in app/src/main/assets/licenses/.
 QNN_VERSION="${QNN_VERSION:-2.40.0.251030}"
 QNN_RELEASE_BASE="${QNN_RELEASE_BASE:-https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models-qnn}"
 QNN_INCLUDE_SHA256="${QNN_INCLUDE_SHA256:-fafe1c9dc3f60393134f22f2c708a9ede287492fa20dedc22c9fabdcf5ebe70d}"

@@ -1,0 +1,77 @@
+第三方组件清单（Android 字幕应用）
+
+本应用以 GPLv3 发布（仓库根目录 LICENSE）。下面是随 APK 打包、随构建链接、
+或首次运行由用户下载的组件，以及各自的许可与获取方式。
+
+──────────────────────────────────────────────
+一、打进 APK 的组件
+
+1. 本应用自研 Kotlin/Compose 代码与 JNI 封装
+   许可：GPLv3。源码：https://github.com/Yizhou147/pyvideotrans （android/ 目录）
+   许可正文随 APK 打包在 assets/licenses，应用内「诊断 → 第三方组件与许可」可直接阅读。
+
+2. whisper.cpp v1.9.5（构建时由 android/scripts/fetch-native-deps.sh 按固定 tag 拉取，
+   交叉编译为 libwhisper_jni.so / libwhisper.so）
+   许可：MIT。上游：https://github.com/ggml-org/whisper.cpp
+
+3. Vulkan-Headers、SPIRV-Headers（仅构建期使用，不进入 APK）
+   许可：Apache-2.0 / MIT。
+
+4. sherpa-onnx（NPU 识别路径，构建期交叉编译为 libsherpa-onnx-jni.so 等）
+   许可：Apache-2.0。上游：https://github.com/k2-fsa/sherpa-onnx
+   固定提交见 android/scripts/fetch-native-deps.sh 中的 SHERPA_COMMIT。
+
+5. ONNX Runtime Android 1.28.2（libonnxruntime.so，sherpa 的 VAD/非 QNN 代码路径使用）
+   许可：MIT。
+
+6. libc++_shared.so（NDK 27.2.12479018 运行库）
+   许可：Apache-2.0 with LLVM exception。
+
+7. Qualcomm QNN 运行库（libQnnHtp.so、libQnnSystem.so、libQnnHtpNetRunExtensions.so、
+   libQnnHtpGraphFinalizeExtensions.so、libQnnHtpPrepareExtensions.so，
+   以及每个目标 HTP 架构的 libQnnHtpV<arch>Skel.so / libQnnHtpV<arch>Stub.so）
+   许可：QuIC「TERMS AND CONDITIONS OF USE — AI Model Hub License」，专有、非开源。
+   边界与必须保留的声明见同目录 Qualcomm-QNN-NOTICE.txt。
+   这是本仓库唯一非开源、且不允许单独再分发的组件。
+
+8. OpenCC 繁转简词典数据（assets/opencc/t2s.tsv）
+   许可：Apache-2.0，正文见 OpenCC-LICENSE.txt，生成方式见 ../opencc/NOTICE.txt。
+
+9. FFmpegKit maintained 8.1.9 full-gpl（ffmpeg-kit-full-gpl AAR）
+   许可：组件 LGPL/GPLv3，本应用按 GPLv3 组合发布（full-gpl 含 GPL 组件）。
+   上游：https://github.com/ffmpegkit-maintained/ffmpeg-kit
+   该 AAR 自带 LICENSE 与源码入口，构建时随 APK 打包。
+
+10. Apache Commons Compress 1.28.0（解压 NPU 模型包）
+    许可：Apache-2.0。
+
+11. AndroidX / Compose / Kotlin / kotlinx.coroutines / kotlinx.serialization
+    许可：Apache-2.0。
+
+──────────────────────────────────────────────
+二、首次运行由用户自行下载的组件（不在 APK 内）
+
+1. Whisper GGML 模型（tiny / small / large-v3-turbo-q5_0）
+   许可：MIT（OpenAI Whisper 权重与 ggerganov 转换版）。
+
+2. Silero VAD（ggml-silero-v6.2.0.bin 与 silero_vad.onnx）
+   许可：MIT（模型权重遵循其仓库声明）。
+
+3. NPU Whisper context binary（sherpa-onnx-qnn-SM<soc>-binary-whisper-*.tar.bz2）
+   由 Whisper 权重离线编译成的 QNN 图，模型部分许可 MIT；
+   运行它所需的 QNN 专有运行库见第一节第 7 条。
+
+模型清单与许可字段同时记录在 assets/models.json。
+
+──────────────────────────────────────────────
+三、尚未纳入的组件（Phase 2 烧录字幕时补）
+
+Noto Sans SC（OFL-1.1）字体、libass/fontconfig（LGPL/GPL，随 FFmpegKit full-gpl）、
+llama.cpp（MIT）与 Qwen2.5 GGUF（Apache-2.0）。加入时必须同步补齐本清单与
+assets/licenses 下对应许可正文。
+
+──────────────────────────────────────────────
+四、源码获取承诺
+
+任何人获得本 APK 均可从 https://github.com/Yizhou147/pyvideotrans 取得完整对应源码；
+若该地址失效，请通过仓库 issue 索取，我们随 APK 一并提供书面源码要约（有效期三年）。
