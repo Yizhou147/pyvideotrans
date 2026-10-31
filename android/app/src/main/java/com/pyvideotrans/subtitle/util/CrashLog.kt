@@ -39,5 +39,5 @@ object CrashLog {
     }
 
     private fun listings(dir: File): List<File> =
-        dir.listFiles { file -> file.name.startsWith(PREFIX) }.orEmpty()
+        dir.listFiles()?.filter { it.name.startsWith(PREFIX) } ?: emptyList()
 }
