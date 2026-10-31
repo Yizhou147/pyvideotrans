@@ -23,67 +23,65 @@ class PcmWavReader(file: File) : Closeable {
 
     init {
         try {
-            if (raf.length() < 12L) {
-                throw IOException("WAV 文件过短")
-            }
-            val header = ByteArray(12)
-            raf.readFully(header)
-            val riff = String(header, 0, 4, StandardCharsets.ISO_8859_1)
-            val wave = String(header, 8, 4, StandardCharsets.ISO_8859_1)
-            if (riff != "RIFF" || wave != "WAVE") {
-                throw IOException("不是有效的 WAV 文件")
-            }
-
-            var fmt: FmtChunk? = null
-            var foundData = false
-            var offset = -1L
-            var size = 0L
-
-            while (raf.filePointer + 8 <= raf.length()) {
-                val id = readId()
-                val chunkSize = readUInt32()
-                val chunkStart = raf.filePointer
-                when (id) {
-                    "fmt " -> fmt = readFmt(chunkSize)
-                    "data" -> {
-                        val parsed = fmt ?: throw IOException("WAV 缺少 fmt 块")
-                        if (parsed.formatTag != FORMAT_PCM || parsed.channels != 1 ||
-                            parsed.bitsPerSample != 16 || parsed.sampleRate != 16000
-                        ) {
-                            throw IOException(
-                                "WAV 格式不受支持：需要 16kHz 单声道 16-bit PCM，" +
-                                    "实际 ${parsed.sampleRate}Hz/${parsed.channels}ch/${parsed.bitsPerSample}bit",
-                            )
-                        }
-                        sampleRate = parsed.sampleRate
-                        channels = parsed.channels
-                        bitsPerSample = parsed.bitsPerSample
-                        offset = chunkStart
-                        size = minOf(chunkSize, raf.length() - chunkStart).coerceAtLeast(0L)
-                        foundData = true
-                    }
-                }
-                if (foundData) break
-                val next = chunkStart + chunkSize + (chunkSize and 1L)
-                if (next <= chunkStart || next >= raf.length()) break
-                raf.seek(next)
-            }
-
-            if (!foundData) {
-                throw IOException("WAV 缺少音频数据块")
-            }
-            if (offset < 0L || size <= 0L) {
-                throw IOException("WAV 音频数据为空")
-            }
-            dataOffset = offset
-            dataBytes = size
-            totalSamples = size / 2L
+            val data = readDataChunk()
+            sampleRate = data.format.sampleRate
+            channels = data.format.channels
+            bitsPerSample = data.format.bitsPerSample
+            dataOffset = data.offset
+            dataBytes = data.size
+            totalSamples = data.size / 2L
             raf.seek(dataOffset)
         } catch (t: Throwable) {
             runCatching { raf.close() }
             throw t
         }
     }
+
+    private fun readDataChunk(): WavData {
+        if (raf.length() < 12L) {
+            throw IOException("WAV 文件过短")
+        }
+        val header = ByteArray(12)
+        raf.readFully(header)
+        val riff = String(header, 0, 4, StandardCharsets.ISO_8859_1)
+        val wave = String(header, 8, 4, StandardCharsets.ISO_8859_1)
+        if (riff != "RIFF" || wave != "WAVE") {
+            throw IOException("不是有效的 WAV 文件")
+        }
+
+        var fmt: FmtChunk? = null
+        while (raf.filePointer + 8 <= raf.length()) {
+            val id = readId()
+            val chunkSize = readUInt32()
+            val chunkStart = raf.filePointer
+            if (id == "fmt ") {
+                fmt = readFmt(chunkSize)
+            } else if (id == "data") {
+                val parsed = fmt ?: throw IOException("WAV 缺少 fmt 块")
+                if (parsed.formatTag != FORMAT_PCM || parsed.channels != 1 ||
+                    parsed.bitsPerSample != 16 || parsed.sampleRate != 16000
+                ) {
+                    throw IOException(
+                        "WAV 格式不受支持：需要 16kHz 单声道 16-bit PCM，" +
+                            "实际 ${parsed.sampleRate}Hz/${parsed.channels}ch/${parsed.bitsPerSample}bit",
+                    )
+                }
+                val size = minOf(chunkSize, raf.length() - chunkStart).coerceAtLeast(0L)
+                if (size <= 0L) throw IOException("WAV 音频数据为空")
+                return WavData(parsed, chunkStart, size)
+            }
+            val next = chunkStart + chunkSize + (chunkSize and 1L)
+            if (next <= chunkStart || next >= raf.length()) break
+            raf.seek(next)
+        }
+        throw IOException("WAV 缺少音频数据块")
+    }
+
+    private data class WavData(
+        val format: FmtChunk,
+        val offset: Long,
+        val size: Long,
+    )
 
     fun readSamples(destination: ShortArray): Int {
         if (destination.isEmpty()) return 0
