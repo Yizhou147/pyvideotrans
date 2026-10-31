@@ -1,0 +1,36 @@
+package com.pyvideotrans.subtitle
+
+import android.app.Application
+import android.os.Build
+import com.pyvideotrans.subtitle.data.asr.WhisperNative
+import com.pyvideotrans.subtitle.util.LogBus
+import com.pyvideotrans.subtitle.util.LogLevel
+
+class App : Application() {
+
+    override fun onCreate() {
+        super.onCreate()
+
+        if (WhisperNative.isAvailable) {
+            WhisperNative.setLogSink { level, message ->
+                val logLevel = when (level) {
+                    4 -> LogLevel.ERROR
+                    3 -> LogLevel.WARN
+                    1 -> LogLevel.DEBUG
+                    else -> LogLevel.INFO
+                }
+                message.lineSequence()
+                    .filter { it.isNotBlank() }
+                    .forEach { line -> LogBus.append(logLevel, "whisper", line.trimEnd()) }
+            }
+        } else {
+            LogBus.error("native", "whisper_jni 加载失败：${WhisperNative.loadError}")
+        }
+
+        LogBus.info(
+            "app",
+            "启动 ${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} · ABI=${Build.SUPPORTED_ABIS.firstOrNull() ?: "?"}",
+        )
+        LogBus.info("app", "whisper.cpp ${BuildConfig.WHISPER_CPP_VERSION} · FFmpegKit ${BuildConfig.FFMPEG_KIT_VERSION}")
+    }
+}
