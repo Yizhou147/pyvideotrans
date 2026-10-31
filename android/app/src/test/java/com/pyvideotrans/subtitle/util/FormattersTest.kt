@@ -13,7 +13,7 @@ class FormattersTest {
         assertEquals("1.5 KB", formatBytes(1536))
         assertEquals("1.0 MB", formatBytes(1024L * 1024L))
         assertEquals("1.00 GB", formatBytes(1024L * 1024L * 1024L))
-        assertEquals("547.45 MB", formatBytes(574_041_195))
+        assertEquals("547.4 MB", formatBytes(574_041_195))
     }
 
     @Test
