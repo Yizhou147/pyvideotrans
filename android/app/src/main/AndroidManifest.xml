@@ -3,6 +3,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature
         android:name="android.hardware.vulkan.version"
@@ -51,6 +55,13 @@
         <uses-native-library
             android:name="libadsprpc.so"
             android:required="false" />
+
+        <!-- A recognition run outlives the screen it was started from, so it needs a
+             foreground service: mediaProcessing on Android 14+, dataSync below it. -->
+        <service
+            android:name=".service.SubtitleService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync|mediaProcessing" />
 
         <!-- QNN calls exit() inside the native library on any backend error, so
              NPU inference runs in its own process to keep the UI alive. -->

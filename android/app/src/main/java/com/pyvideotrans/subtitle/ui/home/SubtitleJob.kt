@@ -5,8 +5,6 @@ import android.app.Application
 import android.content.Context
 import android.net.Uri
 import android.os.PowerManager
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
 import com.pyvideotrans.subtitle.data.asr.QnnRemoteClient
 import com.pyvideotrans.subtitle.data.asr.QnnRequest
 import com.pyvideotrans.subtitle.data.asr.QnnStatus
@@ -26,6 +24,7 @@ import com.pyvideotrans.subtitle.domain.model.SubtitleStyle
 import com.pyvideotrans.subtitle.domain.subtitle.AssWriter
 import com.pyvideotrans.subtitle.domain.subtitle.SrtWriter
 import com.pyvideotrans.subtitle.domain.subtitle.SubtitlePostProcessor
+import com.pyvideotrans.subtitle.service.SubtitleService
 import com.pyvideotrans.subtitle.util.LogBus
 import com.pyvideotrans.subtitle.util.ZhVariants
 import com.pyvideotrans.subtitle.util.formatBytes
@@ -33,8 +32,10 @@ import com.pyvideotrans.subtitle.util.formatDurationMs
 import com.pyvideotrans.subtitle.util.formatTimestampMs
 import com.pyvideotrans.subtitle.util.languageIsChinese
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -110,13 +111,23 @@ data class HomeUiState(
         }
 }
 
-class HomeViewModel(application: Application) : AndroidViewModel(application) {
+/**
+ * Owns a subtitle run from picking the video to writing the files out.
+ *
+ * Deliberately not a ViewModel: a long video takes tens of minutes, and the system
+ * recreating or reclaiming the Activity must not take the run down with it. [com.pyvideotrans.subtitle.App]
+ * holds the one instance for the process, and [com.pyvideotrans.subtitle.service.SubtitleService]
+ * keeps the CPU awake and shows progress while it runs.
+ */
+class SubtitleJob(private val app: Application) {
 
-    private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val modelRepository = ModelRepository(application)
-    private val mediaRepository = MediaRepository(application)
+    private val prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val modelRepository = ModelRepository(app)
+    private val mediaRepository = MediaRepository(app)
     private val engine = WhisperCppEngine()
-    private val qnnClient = QnnRemoteClient(application)
+    private val qnnClient = QnnRemoteClient(app)
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
@@ -142,7 +153,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             prefs.edit().putString(KEY_MODEL_PATH, selected.file.absolutePath).apply()
         }
 
-        val qnnStatus = QnnSupport.status(getApplication())
+        val qnnStatus = QnnSupport.status(app)
         val qnnModels = qnnStatus.soc?.let { modelRepository.listQnnModels(it.socModel) }.orEmpty()
         val savedQnnId = prefs.getString(KEY_QNN_MODEL_ID, null)
         val selectedQnn = qnnModels.firstOrNull { it.spec.id == savedQnnId }
@@ -262,7 +273,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * alone.
      */
     private fun simplifyToHans(result: TranscriptionResult): TranscriptionResult {
-        val app = getApplication<Application>()
         var changed = 0
         val segments = result.segments.map { segment ->
             val converted = ZhVariants.toSimplified(app, segment.text)
@@ -454,13 +464,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         acquireWakeLock()
+        SubtitleService.start(app)
         LogBus.info(
             "job",
             "任务开始：后端=${snapshot.backend.label}，NPU=${qnnModel?.spec?.name ?: "无"}，GGML=${model?.displayName ?: "无"}，线程=${snapshot.threads}",
         )
 
-        job = viewModelScope.launch {
+        job = scope.launch {
             var jobDir: File? = null
+            var copiedVideo: File? = null
+            var extractedWav: File? = null
+            var outputsKept = false
             try {
                 if (snapshot.videoSize > 0) {
                     _state.update { it.copy(phase = "检查存储空间") }
@@ -482,6 +496,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         _state.update { it.copy(phase = "复制视频 $percent%") }
                     },
                 )
+                copiedVideo = videoFile
                 ensureActive()
                 if (cancelRequested) throw CancellationException("已取消")
 
@@ -495,6 +510,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
                 _state.update { it.copy(phase = "抽取音频（FFmpeg）") }
                 val wavFile = mediaRepository.extractAudio(videoFile, workDir)
+                extractedWav = wavFile
                 ensureActive()
                 if (cancelRequested) throw CancellationException("已取消")
 
@@ -573,7 +589,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         tokensPath = files.tokens.absolutePath,
                         vadPath = vadOnnx.absolutePath,
                         wavPath = wavFile.absolutePath,
-                        resultPath = File(workDir, "qnn-result.json").absolutePath,
+                        resultPath = File(workDir, QNN_RESULT_NAME).absolutePath,
                         language = snapshot.language,
                         threads = snapshot.threads,
                     )
@@ -674,6 +690,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         outputTree = snapshot.outputTree?.let(Uri::parse),
                     )
                 }
+                outputsKept = outputs.isNotEmpty()
 
                 val backendLabel = when (usedBackend) {
                     AsrBackend.NPU -> {
@@ -757,9 +774,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             } finally {
+                // Anything the user asked for stays where it is: the share buttons and the
+                // saved copies point at these paths. The video copy and the 16 kHz wav are
+                // only ever inputs, and they are the gigabyte-sized part.
+                jobDir?.let { dir ->
+                    if (outputsKept) {
+                        listOfNotNull(copiedVideo, extractedWav).forEach { it.delete() }
+                        File(dir, QNN_RESULT_NAME).delete()
+                    } else {
+                        dir.deleteRecursively()
+                    }
+                }
                 releaseWakeLock()
-                jobDir?.deleteRecursively()
                 _state.update { it.copy(running = false) }
+                SubtitleService.stop(app)
             }
         }
     }
@@ -774,18 +802,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         job?.cancel()
     }
 
-    override fun onCleared() {
-        cancelRequested = true
-        engine.abort()
-        mediaRepository.cancelActive()
-        job?.cancel()
-        releaseWakeLock()
-        super.onCleared()
-    }
-
     private fun acquireWakeLock() {
         if (wakeLock?.isHeld == true) return
-        val powerManager = getApplication<Application>().getSystemService(PowerManager::class.java)
+        val powerManager = app.getSystemService(PowerManager::class.java)
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
             "pyvideotrans:subtitle-job",
@@ -801,7 +820,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun defaultModelFileName(): String {
-        val activityManager = getApplication<Application>().getSystemService(ActivityManager::class.java)
+        val activityManager = app.getSystemService(ActivityManager::class.java)
         val memoryInfo = ActivityManager.MemoryInfo().also { activityManager.getMemoryInfo(it) }
         val gib = 1024L * 1024L * 1024L
         return when {
@@ -813,7 +832,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun preferredQnnId(models: List<LocalQnnModel>): String? {
         if (models.isEmpty()) return null
-        val activityManager = getApplication<Application>().getSystemService(ActivityManager::class.java)
+        val activityManager = app.getSystemService(ActivityManager::class.java)
         val memoryInfo = ActivityManager.MemoryInfo().also { activityManager.getMemoryInfo(it) }
         val gib = 1024L * 1024L * 1024L
         val order = if (memoryInfo.totalMem >= 12L * gib) {
@@ -827,6 +846,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private companion object {
+        /** Where the NPU worker writes its result; it is an input, not an output. */
+        const val QNN_RESULT_NAME = "qnn-result.json"
+
         const val PREFS_NAME = "subtitle_settings"
         const val KEY_MODEL_PATH = "model_path"
         const val KEY_QNN_MODEL_ID = "qnn_model_id"

@@ -3,10 +3,17 @@ package com.pyvideotrans.subtitle
 import android.app.Application
 import android.os.Build
 import com.pyvideotrans.subtitle.data.asr.WhisperNative
+import com.pyvideotrans.subtitle.ui.home.SubtitleJob
 import com.pyvideotrans.subtitle.util.LogBus
 import com.pyvideotrans.subtitle.util.LogLevel
 
 class App : Application() {
+
+    /**
+     * The one job controller for the process. Held here rather than in a ViewModel so a run
+     * keeps going when the system recreates or reclaims the Activity.
+     */
+    val subtitleJob: SubtitleJob by lazy { SubtitleJob(this) }
 
     override fun onCreate() {
         super.onCreate()

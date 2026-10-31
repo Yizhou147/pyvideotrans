@@ -70,11 +70,11 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    viewModel: HomeViewModel,
+    job: SubtitleJob,
     onOpenModels: () -> Unit,
     onOpenDiagnostics: () -> Unit,
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by job.state.collectAsState()
     val logs by LogBus.lines.collectAsState()
     val context = LocalContext.current
 
@@ -91,7 +91,7 @@ fun HomeScreen(
                 // Some providers do not grant persistable access; the cached copy is
                 // made immediately, so the job can still proceed.
             }
-            viewModel.setVideo(uri)
+            job.setVideo(uri)
         }
     }
 
@@ -108,12 +108,12 @@ fun HomeScreen(
                 // Writing will fail later with a clear message if the folder stayed
                 // read-only, so the pick itself is still worth honouring.
             }
-            viewModel.setOutputTree(uri)
+            job.setOutputTree(uri)
         }
     }
 
     LaunchedEffect(Unit) {
-        viewModel.refreshModels()
+        job.refreshModels()
     }
 
     Scaffold(
@@ -167,7 +167,7 @@ fun HomeScreen(
                     ) {
                         ConfigSection(
                             state = state,
-                            viewModel = viewModel,
+                            job = job,
                             onPickVideo = { videoPicker.launch(VIDEO_MIME_TYPES) },
                             onPickOutputDir = { outputDirPicker.launch(null) },
                             onOpenModels = onOpenModels,
@@ -189,7 +189,7 @@ fun HomeScreen(
                 ) {
                     ConfigSection(
                         state = state,
-                        viewModel = viewModel,
+                        job = job,
                         onPickVideo = { videoPicker.launch(VIDEO_MIME_TYPES) },
                         onPickOutputDir = { outputDirPicker.launch(null) },
                         onOpenModels = onOpenModels,
@@ -210,7 +210,7 @@ fun HomeScreen(
 @Composable
 private fun ConfigSection(
     state: HomeUiState,
-    viewModel: HomeViewModel,
+    job: SubtitleJob,
     onPickVideo: () -> Unit,
     onPickOutputDir: () -> Unit,
     onOpenModels: () -> Unit,
@@ -219,17 +219,17 @@ private fun ConfigSection(
         VideoCard(
             state = state,
             onPickVideo = onPickVideo,
-            onClearVideo = viewModel::clearVideo,
+            onClearVideo = job::clearVideo,
         )
         SettingsCard(
             state = state,
-            viewModel = viewModel,
+            job = job,
             onOpenModels = onOpenModels,
         )
-        OutputCard(state = state, viewModel = viewModel, onPickDir = onPickOutputDir)
+        OutputCard(state = state, job = job, onPickDir = onPickOutputDir)
 
         if (state.running || state.phase != "待命") {
-            ProgressCard(state = state, onCancel = viewModel::cancel)
+            ProgressCard(state = state, onCancel = job::cancel)
         }
 
         state.summary?.let { summary ->
@@ -249,7 +249,7 @@ private fun ConfigSection(
         }
 
         state.message?.let { message ->
-            MessageCard(message = message, onDismiss = viewModel::dismissMessage)
+            MessageCard(message = message, onDismiss = job::dismissMessage)
         }
 
         Text(
@@ -296,7 +296,7 @@ private fun VideoCard(
 @Composable
 private fun SettingsCard(
     state: HomeUiState,
-    viewModel: HomeViewModel,
+    job: SubtitleJob,
     onOpenModels: () -> Unit,
 ) {
     var ggmlMenuExpanded by remember { mutableStateOf(false) }
@@ -317,7 +317,7 @@ private fun SettingsCard(
                 AsrBackend.entries.forEach { backend ->
                     FilterChip(
                         selected = state.backend == backend,
-                        onClick = { viewModel.setBackend(backend) },
+                        onClick = { job.setBackend(backend) },
                         label = { Text(backend.label) },
                         enabled = !state.running,
                     )
@@ -333,7 +333,7 @@ private fun SettingsCard(
         if (state.backend == AsrBackend.AUTO || state.backend == AsrBackend.NPU) {
             NpuSettings(
                 state = state,
-                viewModel = viewModel,
+                job = job,
                 onOpenModels = onOpenModels,
             )
         }
@@ -376,7 +376,7 @@ private fun SettingsCard(
                         DropdownMenuItem(
                             text = { Text(model.displayName) },
                             onClick = {
-                                viewModel.selectModel(model.file.absolutePath)
+                                job.selectModel(model.file.absolutePath)
                                 ggmlMenuExpanded = false
                             },
                         )
@@ -417,7 +417,7 @@ private fun SettingsCard(
             )
             Slider(
                 value = state.threads.toFloat(),
-                onValueChange = { viewModel.setThreads(it.roundToInt()) },
+                onValueChange = { job.setThreads(it.roundToInt()) },
                 valueRange = 1f..8f,
                 steps = 6,
                 enabled = !state.running,
@@ -435,7 +435,7 @@ private fun SettingsCard(
                 LANGUAGE_OPTIONS.forEach { (code, label) ->
                     FilterChip(
                         selected = state.language == code,
-                        onClick = { viewModel.setLanguage(code) },
+                        onClick = { job.setLanguage(code) },
                         label = { Text(label) },
                         enabled = !state.running,
                     )
@@ -461,14 +461,14 @@ private fun SettingsCard(
             )
             Switch(
                 checked = state.simplified,
-                onCheckedChange = viewModel::setSimplified,
+                onCheckedChange = job::setSimplified,
                 enabled = !state.running,
             )
         }
 
         val requirement = startRequirement(state)
         Button(
-            onClick = viewModel::start,
+            onClick = job::start,
             enabled = !state.running && state.canStart,
             modifier = Modifier
                 .fillMaxWidth()
@@ -489,7 +489,7 @@ private fun SettingsCard(
 @Composable
 private fun OutputCard(
     state: HomeUiState,
-    viewModel: HomeViewModel,
+    job: SubtitleJob,
     onPickDir: () -> Unit,
 ) {
     SectionCard(title = "字幕输出") {
@@ -506,7 +506,7 @@ private fun OutputCard(
             )
             Switch(
                 checked = state.softSubs,
-                onCheckedChange = viewModel::setSoftSubs,
+                onCheckedChange = job::setSoftSubs,
                 enabled = !state.running,
             )
         }
@@ -561,7 +561,7 @@ private fun OutputCard(
 @Composable
 private fun NpuSettings(
     state: HomeUiState,
-    viewModel: HomeViewModel,
+    job: SubtitleJob,
     onOpenModels: () -> Unit,
 ) {
     var qnnMenuExpanded by remember { mutableStateOf(false) }
@@ -648,7 +648,7 @@ private fun NpuSettings(
                             DropdownMenuItem(
                                 text = { Text(model.spec.name) },
                                 onClick = {
-                                    viewModel.selectQnnModel(model.spec.id)
+                                    job.selectQnnModel(model.spec.id)
                                     qnnMenuExpanded = false
                                 },
                             )
