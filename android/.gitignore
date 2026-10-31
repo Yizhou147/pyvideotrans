@@ -7,3 +7,8 @@ third_party/
 captures/
 .externalNativeBuild/
 .cxx/
+
+# The repository root ignores any directory named "models" (downloaded models).
+# Re-include the Kotlin UI package that shares that name.
+!app/src/main/java/com/pyvideotrans/subtitle/ui/models/
+!app/src/main/java/com/pyvideotrans/subtitle/ui/models/**
