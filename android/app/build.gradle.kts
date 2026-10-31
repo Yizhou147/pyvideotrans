@@ -7,8 +7,14 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
-val buildId = System.getenv("APK_BUILD_ID")?.take(7)?.takeIf { it.isNotBlank() } ?: "local"
+// Signing material arrives as Gradle properties, not environment variables: a
+// reused Gradle daemon keeps the environment of the invocation that started it
+// and would silently fall back to the throwaway debug key.
+fun gradleProp(name: String): String? =
+    providers.gradleProperty(name).orNull?.trim()?.takeIf { it.isNotEmpty() }
+
+val signingKeystorePath = gradleProp("signingFile")
+val buildId = gradleProp("buildId")?.take(7) ?: "local"
 
 android {
     namespace = "com.pyvideotrans.subtitle"
@@ -54,14 +60,14 @@ android {
     }
 
     signingConfigs {
-        if (!releaseKeystorePath.isNullOrBlank()) {
+        if (signingKeystorePath != null) {
             // One key for every CI build, debug included, so an update installs
             // over the previous APK instead of demanding an uninstall.
             create("subtitle") {
-                storeFile = file(releaseKeystorePath)
-                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
-                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+                storeFile = file(signingKeystorePath)
+                storePassword = gradleProp("signingStorePassword")
+                keyAlias = gradleProp("signingKeyAlias")
+                keyPassword = gradleProp("signingKeyPassword")
                 storeType = "PKCS12"
             }
         }
@@ -70,7 +76,7 @@ android {
     buildTypes {
         debug {
             isJniDebuggable = false
-            if (!releaseKeystorePath.isNullOrBlank()) {
+            if (signingKeystorePath != null) {
                 signingConfig = signingConfigs.getByName("subtitle")
             }
             externalNativeBuild {
@@ -82,7 +88,7 @@ android {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            if (!releaseKeystorePath.isNullOrBlank()) {
+            if (signingKeystorePath != null) {
                 signingConfig = signingConfigs.getByName("subtitle")
             }
         }

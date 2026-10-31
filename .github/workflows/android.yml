@@ -106,7 +106,6 @@ jobs:
             exit 1
           fi
           printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/subtitle.p12"
-          echo "ANDROID_KEYSTORE_PATH=${RUNNER_TEMP}/subtitle.p12" >> "${GITHUB_ENV}"
 
       - name: Build debug APK
         working-directory: android
@@ -114,16 +113,22 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          APK_BUILD_ID: ${{ github.sha }}
-        run: gradle assembleDebug
+        run: |
+          set -euo pipefail
+          gradle assembleDebug \
+            -PsigningFile="${RUNNER_TEMP}/subtitle.p12" \
+            -PsigningStorePassword="${ANDROID_KEYSTORE_PASSWORD}" \
+            -PsigningKeyAlias="${ANDROID_KEY_ALIAS}" \
+            -PsigningKeyPassword="${ANDROID_KEY_PASSWORD}" \
+            -PbuildId="${APK_BUILD_ID}"
 
       - name: Collect artifact
         working-directory: android
         run: |
           set -euo pipefail
-          short="${APK_BUILD_ID%%??????????????????????????????????????????}"
+          short=$(printf '%.7s' "${APK_BUILD_ID}")
           mkdir -p ../artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk "../artifacts/subtitle-${short:0:7}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "../artifacts/subtitle-${short}.apk"
           ls -l ../artifacts
           (cd ../artifacts && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
 
