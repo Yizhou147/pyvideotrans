@@ -19,8 +19,16 @@ import com.pyvideotrans.subtitle.data.media.MediaRepository
 import com.pyvideotrans.subtitle.data.model.LocalModel
 import com.pyvideotrans.subtitle.data.model.LocalQnnModel
 import com.pyvideotrans.subtitle.data.model.ModelRepository
+import com.pyvideotrans.subtitle.domain.model.Cue
+import com.pyvideotrans.subtitle.domain.model.MediaInfo
+import com.pyvideotrans.subtitle.domain.model.SubtitleOptions
+import com.pyvideotrans.subtitle.domain.model.SubtitleStyle
+import com.pyvideotrans.subtitle.domain.subtitle.AssWriter
+import com.pyvideotrans.subtitle.domain.subtitle.SrtWriter
+import com.pyvideotrans.subtitle.domain.subtitle.SubtitlePostProcessor
 import com.pyvideotrans.subtitle.util.LogBus
 import com.pyvideotrans.subtitle.util.ZhVariants
+import com.pyvideotrans.subtitle.util.formatBytes
 import com.pyvideotrans.subtitle.util.formatDurationMs
 import com.pyvideotrans.subtitle.util.formatTimestampMs
 import com.pyvideotrans.subtitle.util.languageIsChinese
@@ -36,7 +44,15 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.util.Locale
+
+/** Something the task produced, and where it went. */
+data class OutputItem(
+    val name: String,
+    val kind: String,
+    val savedTo: String? = null,
+)
 
 enum class AsrBackend(val label: String, val detail: String) {
     AUTO("自动", "优先 NPU，其次 Vulkan GPU，最后 CPU"),
@@ -60,6 +76,10 @@ data class HomeUiState(
     val threads: Int = 4,
     val language: String = "auto",
     val simplified: Boolean = true,
+    val softSubs: Boolean = true,
+    val outputTree: String? = null,
+    val outputDirName: String = "",
+    val outputs: List<OutputItem> = emptyList(),
     val running: Boolean = false,
     val phase: String = "待命",
     val progress: Int? = null,
@@ -149,6 +169,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 threads = prefs.getInt(KEY_THREADS, DEFAULT_THREADS).coerceIn(1, 8),
                 language = prefs.getString(KEY_LANGUAGE, "auto") ?: "auto",
                 simplified = prefs.getBoolean(KEY_SIMPLIFIED, true),
+                softSubs = prefs.getBoolean(KEY_SOFT_SUBS, true),
+                outputTree = prefs.getString(KEY_OUTPUT_TREE, null),
+                outputDirName = prefs.getString(KEY_OUTPUT_NAME, "").orEmpty(),
             )
         }
     }
@@ -210,6 +233,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(simplified = enabled) }
     }
 
+    fun setSoftSubs(enabled: Boolean) {
+        if (_state.value.running) return
+        prefs.edit().putBoolean(KEY_SOFT_SUBS, enabled).apply()
+        _state.update { it.copy(softSubs = enabled) }
+    }
+
+    /** Where generated files are copied; without it they stay in the app cache. */
+    fun setOutputTree(uri: Uri) {
+        if (_state.value.running) return
+        val name = folderLabel(uri)
+        prefs.edit()
+            .putString(KEY_OUTPUT_TREE, uri.toString())
+            .putString(KEY_OUTPUT_NAME, name)
+            .apply()
+        _state.update { it.copy(outputTree = uri.toString(), outputDirName = name) }
+        LogBus.info("ui", "已选择保存位置：${name.ifBlank { uri.toString() }}")
+    }
+
     fun dismissMessage() {
         _state.update { it.copy(message = null) }
     }
@@ -237,6 +278,114 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             if (changed > 0) "繁体已转简体：$changed/${result.segments.size} 条" else "识别结果已是简体",
         )
         return result.copy(segments = segments)
+    }
+
+    /**
+     * Recognition output is not a subtitle yet: the text is re-wrapped, the timeline is
+     * made non-overlapping, and only then is it written out as SRT/ASS and muxed into a
+     * video that carries the subtitle as a selectable track.
+     */
+    private suspend fun emitSubtitles(
+        result: TranscriptionResult,
+        videoFile: File,
+        media: MediaInfo,
+        workDir: File,
+        baseName: String,
+        chinese: Boolean,
+        softSubs: Boolean,
+        outputTree: Uri?,
+    ): List<OutputItem> {
+        val options = if (chinese) {
+            SubtitleOptions()
+        } else {
+            SubtitleOptions(maxCharsPerLine = LATIN_CHARS_PER_LINE, cjk = false)
+        }
+        val cues = SubtitlePostProcessor.process(
+            result.segments.map { Cue(it.t0, it.t1, it.text) },
+            options,
+        )
+        if (cues.isEmpty()) {
+            LogBus.warn("subtitle", "后处理之后没有留下可显示的字幕")
+            return emptyList()
+        }
+        LogBus.info(
+            "subtitle",
+            "字幕整理：${result.segments.size} 段 → ${cues.size} 条，每行最多 ${options.maxCharsPerLine} 字",
+        )
+        cues.forEach { cue ->
+            LogBus.info(
+                "srt",
+                "${formatTimestampMs(cue.startMs)} --> ${formatTimestampMs(cue.endMs)}  ${cue.text.replace("\n", " / ")}",
+            )
+        }
+
+        val style = SubtitleStyle(
+            playResX = media.width.takeIf { it > 0 } ?: DEFAULT_PLAY_RES_X,
+            playResY = media.height.takeIf { it > 0 } ?: DEFAULT_PLAY_RES_Y,
+            title = baseName,
+        )
+        val srtFile = File(workDir, "$baseName.srt")
+        val assFile = File(workDir, "$baseName.ass")
+        withContext(Dispatchers.IO) {
+            SrtWriter.write(srtFile, cues)
+            AssWriter.write(assFile, cues, style, options)
+        }
+        LogBus.info("subtitle", "已写出 ${srtFile.name} (${formatBytes(srtFile.length())})")
+
+        val outputs = mutableListOf(
+            OutputItem(srtFile.name, "字幕文件", publishOrNull(srtFile, outputTree)),
+            OutputItem(assFile.name, "带样式的字幕", publishOrNull(assFile, outputTree)),
+        )
+
+        if (softSubs) {
+            currentCoroutineContext().ensureActive()
+            _state.update { it.copy(phase = "封装软字幕（FFmpeg）") }
+            val muxed = File(workDir, "$baseName.subs.mp4")
+            try {
+                mediaRepository.muxSoftSubtitles(videoFile, srtFile, muxed, SUBTITLE_LANGUAGE_TAG)
+                outputs += OutputItem(muxed.name, "软字幕视频", publishOrNull(muxed, outputTree))
+                LogBus.info("media", "已封装软字幕视频 ${muxed.name} (${formatBytes(muxed.length())})")
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                // An hour of recognition must not be thrown away because one container
+                // refused the mux; the subtitle files are already on disk.
+                LogBus.warn(
+                    "media",
+                    "软字幕封装失败：${t.message ?: t.javaClass.simpleName}；字幕文件已保留，可选「烧录字幕」或手动加载 SRT",
+                )
+            }
+        }
+        return outputs
+    }
+
+    /** Saving is best effort: a read-only or revoked folder cannot undo the subtitles. */
+    private suspend fun publishOrNull(source: File, tree: Uri?): String? {
+        if (tree == null) return null
+        return try {
+            mediaRepository.publish(source, tree) { percent ->
+                _state.update { it.copy(phase = "保存 ${source.name} $percent%") }
+            }.toString()
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (t: Throwable) {
+            LogBus.warn("media", "保存到所选位置失败（${source.name}）：${t.message ?: t.javaClass.simpleName}")
+            null
+        }
+    }
+
+    /** The provider's own name for the folder; a tree URI's segment is the fallback. */
+    private fun folderLabel(uri: Uri): String {
+        val fromProvider = runCatching { mediaRepository.queryDisplayName(uri) }.getOrDefault("")
+        if (fromProvider.isNotBlank() && fromProvider != "video.mp4") return fromProvider
+        val segment = Uri.decode(uri.lastPathSegment.orEmpty())
+        return segment.substringAfter(':').ifBlank { segment }
+    }
+
+    /** The name goes into FFmpeg arguments and into the file system, so strip the rest. */
+    private fun baseNameOf(displayName: String): String {
+        val stem = displayName.substringBeforeLast('.').ifBlank { "subtitle" }
+        return stem.replace(UNSAFE_NAME, "_").trim('_').take(60).ifBlank { "subtitle" }
     }
 
     fun start() {
@@ -301,6 +450,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 progress = null,
                 summary = null,
                 message = null,
+                outputs = emptyList(),
             )
         }
         acquireWakeLock()
@@ -314,7 +464,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 if (snapshot.videoSize > 0) {
                     _state.update { it.copy(phase = "检查存储空间") }
-                    val needed = snapshot.videoSize * 2 + 300L * 1024L * 1024L
+                    val copies = if (snapshot.softSubs) 3L else 2L
+                    val needed = snapshot.videoSize * copies + 300L * 1024L * 1024L
                     mediaRepository.requireFreeSpace(needed)
                 }
 
@@ -331,6 +482,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         _state.update { it.copy(phase = "复制视频 $percent%") }
                     },
                 )
+                ensureActive()
+                if (cancelRequested) throw CancellationException("已取消")
+
+                _state.update { it.copy(phase = "读取视频信息") }
+                val media = mediaRepository.probe(videoFile)
+                if (!media.hasAudio) {
+                    throw IOException("这个视频没有音轨，无法识别语音")
+                }
                 ensureActive()
                 if (cancelRequested) throw CancellationException("已取消")
 
@@ -477,9 +636,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (cancelRequested) throw CancellationException("已取消")
 
                 val rawResult = finalOutcome.result
-                val result = if (snapshot.simplified &&
-                    languageIsChinese(rawResult.language, snapshot.language)
-                ) {
+                val chinese = languageIsChinese(rawResult.language, snapshot.language)
+                val result = if (snapshot.simplified && chinese) {
                     withContext(Dispatchers.Default) { simplifyToHans(rawResult) }
                 } else {
                     rawResult
@@ -499,12 +657,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     LogBus.warn("asr", "没有识别到语音内容")
                 } else {
                     LogBus.info("asr", "识别结果（${result.segments.size} 条，语言=$languageLabel）")
-                    result.segments.forEach { segment ->
-                        LogBus.info(
-                            "srt",
-                            "${formatTimestampMs(segment.t0)} --> ${formatTimestampMs(segment.t1)}  ${segment.text.trim()}",
-                        )
-                    }
+                }
+
+                _state.update { it.copy(phase = "生成字幕文件") }
+                val outputs = if (result.segments.isEmpty()) {
+                    emptyList()
+                } else {
+                    emitSubtitles(
+                        result = result,
+                        videoFile = videoFile,
+                        media = media,
+                        workDir = workDir,
+                        baseName = baseNameOf(snapshot.videoName),
+                        chinese = chinese,
+                        softSubs = snapshot.softSubs,
+                        outputTree = snapshot.outputTree?.let(Uri::parse),
+                    )
                 }
 
                 val backendLabel = when (usedBackend) {
@@ -532,7 +700,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         append("\n回退：$fallbackNote")
                     }
                     append("\n线程 ${snapshot.threads}")
-                    append("\nPhase 0 版本将识别结果显示在日志中；SRT 与字幕封装在 Phase 1 加入。")
+                    if (outputs.isEmpty()) {
+                        append("\n没有生成字幕文件")
+                    } else {
+                        append("\n输出：${outputs.joinToString("、") { it.name }}")
+                        append(
+                            if (snapshot.outputTree == null) {
+                                "\n未选择保存位置，文件暂时留在应用缓存中"
+                            } else {
+                                val saved = outputs.count { it.savedTo != null }
+                                "\n已保存到所选位置：$saved/${outputs.size} 个文件"
+                            },
+                        )
+                    }
                 }
 
                 _state.update {
@@ -540,6 +720,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         phase = "完成",
                         progress = 100,
                         summary = summary,
+                        outputs = outputs,
                     )
                 }
                 LogBus.info(
@@ -653,6 +834,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         const val KEY_THREADS = "threads"
         const val KEY_LANGUAGE = "language"
         const val KEY_SIMPLIFIED = "zh_hans"
+        const val KEY_SOFT_SUBS = "soft_subtitles"
+        const val KEY_OUTPUT_TREE = "output_tree"
+        const val KEY_OUTPUT_NAME = "output_tree_name"
+
+        /** Latin text needs a wider line than 16 Chinese characters to stay readable. */
+        const val LATIN_CHARS_PER_LINE = 42
+
+        /** MP4 carries ISO 639-2/B three-letter language codes. */
+        const val SUBTITLE_LANGUAGE_TAG = "zho"
+
+        const val DEFAULT_PLAY_RES_X = 1280
+        const val DEFAULT_PLAY_RES_Y = 720
+
+        val UNSAFE_NAME = Regex("""[\\/:*?"<>|\s]+""")
         val DEFAULT_THREADS = Runtime.getRuntime().availableProcessors().coerceIn(2, 4)
     }
 }

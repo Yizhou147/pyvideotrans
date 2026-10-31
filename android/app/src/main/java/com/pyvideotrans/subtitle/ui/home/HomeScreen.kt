@@ -94,6 +94,23 @@ fun HomeScreen(
         }
     }
 
+    val outputDirPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            } catch (_: SecurityException) {
+                // Writing will fail later with a clear message if the folder stayed
+                // read-only, so the pick itself is still worth honouring.
+            }
+            viewModel.setOutputTree(uri)
+        }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.refreshModels()
     }
@@ -151,6 +168,7 @@ fun HomeScreen(
                             state = state,
                             viewModel = viewModel,
                             onPickVideo = { videoPicker.launch(VIDEO_MIME_TYPES) },
+                            onPickOutputDir = { outputDirPicker.launch(null) },
                             onOpenModels = onOpenModels,
                         )
                     }
@@ -172,6 +190,7 @@ fun HomeScreen(
                         state = state,
                         viewModel = viewModel,
                         onPickVideo = { videoPicker.launch(VIDEO_MIME_TYPES) },
+                        onPickOutputDir = { outputDirPicker.launch(null) },
                         onOpenModels = onOpenModels,
                     )
                     Spacer(modifier = Modifier.height(16.dp))
@@ -192,6 +211,7 @@ private fun ConfigSection(
     state: HomeUiState,
     viewModel: HomeViewModel,
     onPickVideo: () -> Unit,
+    onPickOutputDir: () -> Unit,
     onOpenModels: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -205,6 +225,7 @@ private fun ConfigSection(
             viewModel = viewModel,
             onOpenModels = onOpenModels,
         )
+        OutputCard(state = state, viewModel = viewModel, onPickDir = onPickOutputDir)
 
         if (state.running || state.phase != "待命") {
             ProgressCard(state = state, onCancel = viewModel::cancel)
@@ -231,7 +252,7 @@ private fun ConfigSection(
         }
 
         Text(
-            text = "Phase 0 · 识别后端诊断版。自动模式按 NPU（Hexagon）→ Vulkan GPU → CPU 依次回退；SRT 导出与字幕封装在 Phase 1 提供。",
+            text = "Phase 1 · 字幕生成版。自动模式按 NPU（Hexagon）→ Vulkan GPU → CPU 依次回退；字幕文件写入应用缓存，并按所选文件夹复制一份。",
             style = MaterialTheme.typography.labelSmall,
             color = PtMuted,
         )
@@ -460,6 +481,62 @@ private fun SettingsCard(
                 style = MaterialTheme.typography.labelSmall,
                 color = PtWarning,
             )
+        }
+    }
+}
+
+@Composable
+private fun OutputCard(
+    state: HomeUiState,
+    viewModel: HomeViewModel,
+    onPickDir: () -> Unit,
+) {
+    SectionCard(title = "字幕输出") {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "封装软字幕 MP4",
+                style = MaterialTheme.typography.bodyMedium,
+                color = PtText,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = state.softSubs,
+                onCheckedChange = viewModel::setSoftSubs,
+                enabled = !state.running,
+            )
+        }
+        Text(
+            text = "画面和声音直接复制，只增加一条可开关的字幕轨，不重新编码。关闭后只生成 SRT/ASS 文件。",
+            style = MaterialTheme.typography.labelSmall,
+            color = PtMuted,
+        )
+
+        KeyValueRow(
+            label = "保存位置",
+            value = state.outputDirName.ifBlank { if (state.outputTree == null) "未选择（留在缓存）" else "已选择" },
+        )
+        OutlinedButton(onClick = onPickDir, enabled = !state.running) {
+            Text(if (state.outputTree == null) "选择保存位置" else "更换保存位置")
+        }
+
+        if (state.outputs.isEmpty()) {
+            Text(
+                text = "识别完成后生成 SRT 与 ASS；若选择了保存位置，会同时复制到该文件夹。",
+                style = MaterialTheme.typography.labelSmall,
+                color = PtMuted,
+            )
+        } else {
+            state.outputs.forEach { item ->
+                KeyValueRow(
+                    label = item.kind,
+                    value = if (item.savedTo == null) "${item.name}（仅应用缓存）" else item.name,
+                    valueColor = if (item.savedTo == null) PtWarning else PtAccent,
+                )
+            }
         }
     }
 }

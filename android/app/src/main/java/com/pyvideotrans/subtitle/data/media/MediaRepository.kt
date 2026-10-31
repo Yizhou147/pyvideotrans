@@ -3,11 +3,15 @@ package com.pyvideotrans.subtitle.data.media
 import android.content.Context
 import android.net.Uri
 import android.os.StatFs
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.FFprobeKit
 import com.arthenica.ffmpegkit.ReturnCode
+import com.pyvideotrans.subtitle.domain.model.MediaInfo
 import com.pyvideotrans.subtitle.util.LogBus
 import com.pyvideotrans.subtitle.util.formatBytes
+import com.pyvideotrans.subtitle.util.formatDurationMs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -15,6 +19,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import java.util.Locale
+import kotlin.math.roundToInt
 import kotlin.coroutines.cancellation.CancellationException
 
 class MediaRepository(private val context: Context) {
@@ -119,28 +124,7 @@ class MediaRepository(private val context: Context) {
             output.absolutePath,
         )
 
-        val session = try {
-            FFmpegKit.executeWithArguments(arguments)
-        } catch (t: Throwable) {
-            throw IOException("FFmpeg 启动失败：${t.message}", t)
-        }
-
-        activeFfmpegSessionId = session.sessionId
-        try {
-            val returnCode = session.returnCode
-            if (returnCode == null || !ReturnCode.isSuccess(returnCode)) {
-                if (returnCode != null && ReturnCode.isCancel(returnCode)) {
-                    throw CancellationException("音频抽取已取消")
-                }
-                val detail = session.failStackTrace
-                    ?: session.allLogsAsString
-                    ?: "未知 FFmpeg 错误"
-                LogBus.error("ffmpeg", detail.takeLast(2000))
-                throw IOException("音频抽取失败，视频可能没有音轨或格式不受支持")
-            }
-        } finally {
-            activeFfmpegSessionId = 0L
-        }
+        runFfmpeg(arguments, "音频抽取失败，视频可能没有音轨或格式不受支持")
 
         if (!output.isFile || output.length() < 1024) {
             throw IOException("音频抽取失败：输出文件为空")
@@ -148,6 +132,198 @@ class MediaRepository(private val context: Context) {
         LogBus.info("ffmpeg", "已抽取 16kHz 单声道 WAV (${formatBytes(output.length())})")
         output
     }
+
+    /**
+     * Runs FFmpeg with an argument array — never a shell string — so file names with
+     * spaces or quotes cannot change what the command does.
+     */
+    private suspend fun runFfmpeg(arguments: Array<String>, failMessage: String) =
+        withContext(Dispatchers.IO) {
+            val session = try {
+                FFmpegKit.executeWithArguments(arguments)
+            } catch (t: Throwable) {
+                throw IOException("FFmpeg 启动失败：${t.message}", t)
+            }
+            activeFfmpegSessionId = session.sessionId
+            try {
+                val returnCode = session.returnCode
+                if (returnCode == null || !ReturnCode.isSuccess(returnCode)) {
+                    if (returnCode != null && ReturnCode.isCancel(returnCode)) {
+                        throw CancellationException("FFmpeg 任务已取消")
+                    }
+                    val detail = session.failStackTrace
+                        ?: session.allLogsAsString
+                        ?: "未知 FFmpeg 错误"
+                    LogBus.error("ffmpeg", detail.takeLast(2000))
+                    throw IOException(failMessage)
+                }
+            } finally {
+                activeFfmpegSessionId = 0L
+            }
+        }
+
+    /**
+     * Reads duration and the real display size. The rotation is asked for separately
+     * because FFmpegKit's typed media information does not expose it.
+     */
+    suspend fun probe(video: File): MediaInfo = withContext(Dispatchers.IO) {
+        val session = try {
+            FFprobeKit.getMediaInformation(video.absolutePath)
+        } catch (t: Throwable) {
+            throw IOException("FFprobe 启动失败：${t.message}", t)
+        }
+        val information = session.mediaInformation
+            ?: run {
+                val detail = session.allLogsAsString?.takeLast(400).orEmpty()
+                LogBus.error("ffprobe", detail)
+                throw IOException("无法读取视频信息，文件可能已损坏或格式不受支持")
+            }
+        val streams = information.streams.orEmpty()
+        val videoStream = streams.firstOrNull { it.type == "video" }
+        var width = videoStream?.width?.toInt() ?: 0
+        var height = videoStream?.height?.toInt() ?: 0
+        val rotation = readRotation(video.absolutePath)
+        if ((rotation == 90 || rotation == 270) && width > 0 && height > 0) {
+            val swapped = width
+            width = height
+            height = swapped
+        }
+        val durationMs = information.duration?.toDoubleOrNull()?.let { (it * 1000).roundToInt().toLong() } ?: 0L
+        val info = MediaInfo(
+            durationMs = durationMs,
+            width = width,
+            height = height,
+            hasVideo = videoStream != null,
+            hasAudio = streams.any { it.type == "audio" },
+        )
+        LogBus.info(
+            "ffprobe",
+            "视频信息：${info.width}x${info.height}（旋转 $rotation°），时长 ${formatDurationMs(info.durationMs)}，" +
+                "音轨=${if (info.hasAudio) "有" else "无"}，视频轨=${if (info.hasVideo) "有" else "无"}",
+        )
+        info
+    }
+
+    private fun readRotation(path: String): Int {
+        val session = try {
+            FFprobeKit.executeWithArguments(
+                arrayOf(
+                    "-v", "error",
+                    "-select_streams", "v:0",
+                    "-show_entries", "stream_side_data=rotation",
+                    "-of", "default=noprint_wrappers=1:nokey=0",
+                    path,
+                ),
+            )
+        } catch (t: Throwable) {
+            return 0
+        }
+        val line = session.allLogsAsString
+            ?.lineSequence()
+            ?.firstOrNull { it.startsWith("rotation=") }
+            ?: return 0
+        val value = line.substringAfter('=').trim().toDoubleOrNull() ?: return 0
+        return ((value.roundToInt() % 360) + 360) % 360
+    }
+
+    /**
+     * Adds the SRT as a selectable track without re-encoding anything: the video and
+     * audio streams are copied byte for byte, so a two hour film takes seconds instead
+     * of an hour.
+     */
+    suspend fun muxSoftSubtitles(video: File, srt: File, output: File, language: String): File =
+        withContext(Dispatchers.IO) {
+            val arguments = arrayOf(
+                "-hide_banner",
+                "-loglevel", "error",
+                "-nostdin",
+                "-y",
+                "-i", video.absolutePath,
+                "-i", srt.absolutePath,
+                "-map", "0:v?",
+                "-map", "0:a?",
+                "-map", "1:s:0",
+                "-c", "copy",
+                "-c:s", "mov_text",
+                "-metadata:s:s:0", "language=$language",
+                "-disposition:s:0", "default",
+                "-movflags", "+faststart",
+                output.absolutePath,
+            )
+            runFfmpeg(
+                arguments,
+                "软字幕封装失败：这个视频或音轨可能不适合装进 MP4，请改用「烧录字幕」",
+            )
+            if (!output.isFile || output.length() <= 0L) {
+                throw IOException("软字幕封装失败：输出文件为空")
+            }
+            LogBus.info("ffmpeg", "已封装软字幕 (${formatBytes(output.length())})")
+            output
+        }
+
+    /**
+     * Copies a finished file into the folder the user picked. SAF is the only way out
+     * of the app sandbox, and a half-written file is deleted rather than left behind.
+     */
+    suspend fun publish(source: File, treeUri: Uri, onProgress: (Int) -> Unit = {}): Uri =
+        withContext(Dispatchers.IO) {
+            val documentId = try {
+                DocumentsContract.getTreeDocumentId(treeUri)
+            } catch (t: IllegalArgumentException) {
+                throw IOException("所选保存位置无效，请重新选择")
+            }
+            val parent = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
+            val created = DocumentsContract.createDocument(
+                context.contentResolver,
+                parent,
+                mimeFor(source.name),
+                source.name,
+            ) ?: throw IOException("无法在所选位置创建 ${source.name}，该位置可能是只读的")
+            try {
+                copyToFile(source, created, onProgress)
+            } catch (t: Throwable) {
+                runCatching { DocumentsContract.deleteDocument(context.contentResolver, created) }
+                throw t
+            }
+            LogBus.info("media", "已保存 ${source.name} (${formatBytes(source.length())})")
+            created
+        }
+
+    private suspend fun copyToFile(source: File, target: Uri, onProgress: (Int) -> Unit) {
+        val total = source.length()
+        source.inputStream().use { input ->
+            val output = context.contentResolver.openOutputStream(target, "w")
+                ?: throw IOException("无法写入 ${source.name}")
+            output.use { sink ->
+                val buffer = ByteArray(1024 * 1024)
+                var copied = 0L
+                var lastPercent = -1
+                while (true) {
+                    currentCoroutineContext().ensureActive()
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    sink.write(buffer, 0, read)
+                    copied += read
+                    if (total > 0) {
+                        val percent = (copied * 100 / total).toInt().coerceIn(0, 100)
+                        if (percent != lastPercent) {
+                            lastPercent = percent
+                            onProgress(percent)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun mimeFor(name: String): String =
+        when (name.substringAfterLast('.', "").lowercase(Locale.US)) {
+            "mp4", "m4v", "mov" -> "video/mp4"
+            "mkv" -> "video/x-matroska"
+            "srt", "ass", "vtt" -> "text/plain"
+            "json" -> "application/json"
+            else -> "application/octet-stream"
+        }
 
     fun cancelActive() {
         val sessionId = activeFfmpegSessionId
