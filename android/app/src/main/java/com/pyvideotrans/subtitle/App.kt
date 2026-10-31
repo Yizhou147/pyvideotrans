@@ -37,6 +37,11 @@ class App : Application() {
             "app",
             "启动 ${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} · ABI=${Build.SUPPORTED_ABIS.firstOrNull() ?: "?"}",
         )
-        LogBus.info("app", "whisper.cpp ${BuildConfig.WHISPER_CPP_VERSION} · FFmpegKit ${BuildConfig.FFMPEG_KIT_VERSION}")
+        LogBus.info(
+            "app",
+            "构建 ${BuildConfig.BUILD_ID} · whisper.cpp ${BuildConfig.WHISPER_CPP_VERSION} · " +
+                "FFmpegKit ${BuildConfig.FFMPEG_KIT_VERSION} · sherpa ${BuildConfig.SHERPA_ONNX_COMMIT} · " +
+                "QNN ${BuildConfig.QNN_VERSION}",
+        )
     }
 }

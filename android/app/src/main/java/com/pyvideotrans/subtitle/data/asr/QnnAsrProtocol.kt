@@ -43,4 +43,9 @@ internal object QnnAsrProtocol {
     const val KEY_THREADS = "threads"
     const val KEY_LOG = "log"
     const val KEY_ERROR = "error"
+
+    // Name of the file in the shared cache directory that holds the NPU
+    // process' native stderr. QNN aborts with _Exit(), so this is the only
+    // record of why the HTP backend refused to start.
+    const val NATIVE_DIAG_FILE = "npu-native.log"
 }

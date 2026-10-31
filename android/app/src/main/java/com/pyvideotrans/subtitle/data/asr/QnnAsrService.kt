@@ -123,6 +123,7 @@ class QnnAsrService : Service() {
 
     private fun runJob(request: QnnRequest) {
         val nativeDir = File(applicationInfo.nativeLibraryDir)
+        collectNativeDiagnostics(nativeDir)
         val activeEngine = QnnWhisperEngine(nativeDir)
         engine = activeEngine
         try {
@@ -167,6 +168,30 @@ class QnnAsrService : Service() {
             running = false
             reply = null
         }
+    }
+
+    /**
+     * QNN ends a failed init with `_Exit()`, which leaves no Java trace. Native
+     * stderr therefore goes to a file in the shared cache directory and the
+     * loader's verdict on every runtime library is sent to the log panel before
+     * inference starts, so a device failure is readable without adb.
+     */
+    private fun collectNativeDiagnostics(nativeDir: File) {
+        val diagFile = File(applicationContext.cacheDir, QnnAsrProtocol.NATIVE_DIAG_FILE)
+        val redirected = QnnNativeProbe.startNativeLog(diagFile)
+        sendLog(
+            if (redirected) {
+                "原生日志：${diagFile.absolutePath}"
+            } else {
+                "原生日志不可用：native stderr 重定向失败"
+            },
+        )
+        QnnNativeProbe
+            .probe(nativeDir, QnnSupport.hostLoadableLibs(QnnSoc.detect()))
+            .forEach { line ->
+                runCatching { diagFile.appendText("探针：$line\n") }
+                sendLog("运行库检查 $line")
+            }
     }
 
     private fun sendProgress(percent: Int) {

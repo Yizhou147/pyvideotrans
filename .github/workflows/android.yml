@@ -24,6 +24,7 @@ env:
   ANDROID_BUILD_TOOLS: '36.0.0'
   ANDROID_NDK: '27.2.12479018'
   ANDROID_CMAKE: '3.22.1'
+  APK_BUILD_ID: ${{ github.sha }}
 
 jobs:
   build:
@@ -43,14 +44,6 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4.0.4
-
-      # Keep one debug signing key across runs so consecutive APKs can update
-      # in place instead of requiring an uninstall.
-      - name: Cache debug signing key
-        uses: actions/cache@v6
-        with:
-          path: ~/.android/debug.keystore
-          key: android-debug-keystore-${{ runner.os }}-v1
 
       - name: Install SDK, NDK and CMake
         run: |
@@ -103,47 +96,41 @@ jobs:
         working-directory: android
         run: gradle lintDebug
 
-      - name: Build debug APK
-        working-directory: android
-        run: gradle assembleDebug
-
-      - name: Decode release keystore
-        working-directory: android
+      - name: Decode signing keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          if [ -n "${ANDROID_KEYSTORE_BASE64}" ]; then
-            printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/release.keystore"
-            echo "ANDROID_KEYSTORE_PATH=${RUNNER_TEMP}/release.keystore" >> "${GITHUB_ENV}"
-            echo "Release APK will be signed."
-          else
-            echo "ANDROID_KEYSTORE_BASE64 is not set; release APK will be unsigned."
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is missing; the APK would not have a stable signature."
+            exit 1
           fi
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/subtitle.p12"
+          echo "ANDROID_KEYSTORE_PATH=${RUNNER_TEMP}/subtitle.p12" >> "${GITHUB_ENV}"
 
-      - name: Build release APK
+      - name: Build debug APK
         working-directory: android
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: gradle assembleRelease
+          APK_BUILD_ID: ${{ github.sha }}
+        run: gradle assembleDebug
 
-      - name: Collect artifacts
+      - name: Collect artifact
         working-directory: android
         run: |
           set -euo pipefail
+          short="${APK_BUILD_ID%%??????????????????????????????????????????}"
           mkdir -p ../artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk ../artifacts/
-          find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -exec cp {} ../artifacts/ \;
-          if [ -d app/build/outputs/mapping/release ]; then
-            cp app/build/outputs/mapping/release/mapping.txt ../artifacts/ 2>/dev/null || true
-          fi
-          (cd ../artifacts && sha256sum *.apk > SHA256SUMS.txt)
+          cp app/build/outputs/apk/debug/app-debug.apk "../artifacts/subtitle-${short:0:7}.apk"
+          ls -l ../artifacts
+          (cd ../artifacts && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
 
-      - name: Upload APK artifacts
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: pyvideotrans-subtitle-phase0
+          name: pyvideotrans-subtitle-apk
           path: artifacts/
           if-no-files-found: error
           retention-days: 14

@@ -215,6 +215,7 @@ fun DiagnosticsScreen(onBack: () -> Unit) {
             }
 
             SectionCard(title = "运行环境") {
+                KeyValueRow(label = "构建", value = BuildConfig.BUILD_ID)
                 KeyValueRow(label = "whisper.cpp", value = BuildConfig.WHISPER_CPP_VERSION)
                 KeyValueRow(label = "FFmpegKit", value = BuildConfig.FFMPEG_KIT_VERSION)
                 KeyValueRow(

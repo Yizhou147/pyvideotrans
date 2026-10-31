@@ -63,7 +63,7 @@ if(_jni_saved_runtime_output)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${_jni_saved_runtime_output}")
 endif()
 
-add_library(whisper_jni SHARED whisper_jni.cpp)
+add_library(whisper_jni SHARED whisper_jni.cpp qnn_diag.cpp)
 
 target_link_libraries(whisper_jni PRIVATE whisper log)
 target_compile_options(whisper_jni PRIVATE -Wall -Wextra -Wno-unused-parameter -fvisibility=hidden)

@@ -8,6 +8,7 @@ plugins {
 }
 
 val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+val buildId = System.getenv("APK_BUILD_ID")?.take(7)?.takeIf { it.isNotBlank() } ?: "local"
 
 android {
     namespace = "com.pyvideotrans.subtitle"
@@ -26,6 +27,8 @@ android {
         buildConfigField("String", "SHERPA_ONNX_COMMIT", "\"935e5ded3d94\"")
         buildConfigField("String", "QNN_VERSION", "\"2.40.0.251030\"")
         buildConfigField("String", "ONNXRUNTIME_VERSION", "\"1.28.2\"")
+        // Shown in the run log so a device report identifies the exact APK.
+        buildConfigField("String", "BUILD_ID", "\"$buildId\"")
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -52,11 +55,14 @@ android {
 
     signingConfigs {
         if (!releaseKeystorePath.isNullOrBlank()) {
-            create("release") {
+            // One key for every CI build, debug included, so an update installs
+            // over the previous APK instead of demanding an uninstall.
+            create("subtitle") {
                 storeFile = file(releaseKeystorePath)
                 storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("ANDROID_KEY_ALIAS")
                 keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+                storeType = "PKCS12"
             }
         }
     }
@@ -64,6 +70,9 @@ android {
     buildTypes {
         debug {
             isJniDebuggable = false
+            if (!releaseKeystorePath.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("subtitle")
+            }
             externalNativeBuild {
                 cmake {
                     arguments += "-DCMAKE_BUILD_TYPE=Release"
@@ -74,7 +83,7 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
             if (!releaseKeystorePath.isNullOrBlank()) {
-                signingConfig = signingConfigs.getByName("release")
+                signingConfig = signingConfigs.getByName("subtitle")
             }
         }
     }

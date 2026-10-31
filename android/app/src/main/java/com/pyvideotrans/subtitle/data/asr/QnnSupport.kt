@@ -98,17 +98,29 @@ object QnnSupport {
         "libQnnSystem.so",
     )
 
+    fun requiredLibs(soc: QnnSoc?): List<String> = buildList {
+        addAll(REQUIRED_RUNTIME_LIBS)
+        if (soc != null) {
+            add(soc.stubName)
+            add(soc.skelName)
+        }
+    }
+
+    /**
+     * Libraries the application CPU can load. The Skel image is a Hexagon ELF
+     * that only the DSP reads, so dlopen'ing it would always report an error.
+     */
+    fun hostLoadableLibs(soc: QnnSoc?): List<String> = buildList {
+        addAll(REQUIRED_RUNTIME_LIBS)
+        if (soc != null) {
+            add(soc.stubName)
+        }
+    }
+
     fun status(context: Context): QnnStatus {
         val soc = QnnSoc.detect()
         val nativeDir = File(context.applicationInfo.nativeLibraryDir)
-        val required = buildList {
-            addAll(REQUIRED_RUNTIME_LIBS)
-            if (soc != null) {
-                add(soc.skelName)
-                add(soc.stubName)
-            }
-        }
-        val missing = required.filterNot { File(nativeDir, it).isFile }
+        val missing = requiredLibs(soc).filterNot { File(nativeDir, it).isFile }
         val detected = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             listOf(Build.SOC_MANUFACTURER, Build.SOC_MODEL)
                 .filter { it.isNotBlank() }

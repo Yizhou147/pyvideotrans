@@ -90,11 +90,15 @@ class QnnRemoteClient(private val context: Context) {
                 if (resultFile.isFile) {
                     resumeFromResult()
                 } else {
-                    // QNN aborts with exit() on any backend error, so the only
-                    // clue left behind is the dying process' own logcat lines.
-                    val tail = readNativeLogTail()
-                    val detail = if (tail.isBlank()) message else "$message 底层日志：$tail"
-                    continuation.resumeWithException(QnnProcessDiedException(detail))
+                    // QNN aborts with _Exit() on any backend error, so the only
+                    // clues left behind are the dying process' native stderr file
+                    // and its logcat lines.
+                    val detail = listOf(
+                        readNativeDiagTail(context),
+                        readNativeLogTail(),
+                    ).filter { it.isNotBlank() }.joinToString(" | ")
+                    val full = if (detail.isBlank()) message else "$message 底层日志：$detail"
+                    continuation.resumeWithException(QnnProcessDiedException(full))
                 }
             }
 
@@ -239,4 +243,17 @@ private fun readNativeLogTail(): String = runCatching {
         .takeLast(8)
         .joinToString(" / ")
     matched.take(700)
+}.getOrDefault("")
+
+/** Tail of the native stderr the NPU process redirected before starting QNN. */
+private fun readNativeDiagTail(context: Context): String = runCatching {
+    val file = File(context.applicationContext.cacheDir, QnnAsrProtocol.NATIVE_DIAG_FILE)
+    if (!file.isFile) return ""
+    val tail = file.readText()
+        .lines()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .takeLast(12)
+        .joinToString(" / ")
+    tail.take(1600)
 }.getOrDefault("")
