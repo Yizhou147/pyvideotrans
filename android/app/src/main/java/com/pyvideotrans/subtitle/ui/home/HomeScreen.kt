@@ -498,6 +498,30 @@ private fun SettingsCard(
             )
         }
 
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "运行时屏幕常亮",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = PtText,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = state.keepScreenOn,
+                    onCheckedChange = job::setKeepScreenOn,
+                )
+            }
+            Text(
+                text = "只挡自动息屏；按电源键锁屏仍会停。",
+                style = MaterialTheme.typography.labelSmall,
+                color = PtMuted,
+            )
+        }
+
         val requirement = startRequirement(state)
         Button(
             onClick = job::start,

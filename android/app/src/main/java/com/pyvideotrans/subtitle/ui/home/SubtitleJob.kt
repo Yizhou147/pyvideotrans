@@ -79,6 +79,7 @@ data class HomeUiState(
     val threads: Int = 4,
     val language: String = "auto",
     val simplified: Boolean = true,
+    val keepScreenOn: Boolean = true,
     val softSubs: Boolean = true,
     val outputTree: String? = null,
     val outputDirName: String = "",
@@ -185,6 +186,7 @@ class SubtitleJob(private val app: Application) {
                 threads = prefs.getInt(KEY_THREADS, DEFAULT_THREADS).coerceIn(1, 8),
                 language = prefs.getString(KEY_LANGUAGE, "auto") ?: "auto",
                 simplified = prefs.getBoolean(KEY_SIMPLIFIED, true),
+                keepScreenOn = prefs.getBoolean(KEY_KEEP_SCREEN_ON, true),
                 softSubs = prefs.getBoolean(KEY_SOFT_SUBS, true),
                 outputTree = prefs.getString(KEY_OUTPUT_TREE, null),
                 outputDirName = prefs.getString(KEY_OUTPUT_NAME, "").orEmpty(),
@@ -247,6 +249,12 @@ class SubtitleJob(private val app: Application) {
         if (_state.value.running) return
         prefs.edit().putBoolean(KEY_SIMPLIFIED, enabled).apply()
         _state.update { it.copy(simplified = enabled) }
+    }
+
+    /** Switchable mid-run: the screen may already be asleep on the desk by the time it is noticed. */
+    fun setKeepScreenOn(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON, enabled).apply()
+        _state.update { it.copy(keepScreenOn = enabled) }
     }
 
     fun setSoftSubs(enabled: Boolean) {
@@ -984,6 +992,7 @@ class SubtitleJob(private val app: Application) {
         const val KEY_THREADS = "threads"
         const val KEY_LANGUAGE = "language"
         const val KEY_SIMPLIFIED = "zh_hans"
+        const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         const val KEY_SOFT_SUBS = "soft_subtitles"
         const val KEY_OUTPUT_TREE = "output_tree"
         const val KEY_OUTPUT_NAME = "output_tree_name"

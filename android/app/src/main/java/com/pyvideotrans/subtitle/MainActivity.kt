@@ -1,8 +1,10 @@
 package com.pyvideotrans.subtitle
 
 import android.Manifest
+import android.app.Activity
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
@@ -13,12 +15,16 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pyvideotrans.subtitle.ui.diagnostics.DiagnosticsScreen
 import com.pyvideotrans.subtitle.ui.home.HomeScreen
@@ -36,6 +42,9 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             SubtitleTheme {
+                val job = (applicationContext as App).subtitleJob
+                val uiState by job.state.collectAsState()
+                KeepScreenOn(uiState.keepScreenOn)
                 val askNotifications = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission(),
                 ) { }
@@ -64,17 +73,33 @@ class MainActivity : ComponentActivity() {
 
                         "diagnostics" -> DiagnosticsScreen(onBack = { screen = "home" })
 
-                        else -> {
-                            val job = (applicationContext as App).subtitleJob
-                            HomeScreen(
-                                job = job,
-                                onOpenModels = { screen = "models" },
-                                onOpenDiagnostics = { screen = "diagnostics" },
-                            )
-                        }
+                        else -> HomeScreen(
+                            job = job,
+                            onOpenModels = { screen = "models" },
+                            onOpenDiagnostics = { screen = "diagnostics" },
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * A screen timing out is what stops a long run sitting on a desk, and unlike the power button
+ * that one is ours to prevent. The flag binds to this window, so it stops mattering as soon as
+ * another app is the visible one.
+ */
+@Composable
+private fun KeepScreenOn(enabled: Boolean) {
+    val view = LocalView.current
+    DisposableEffect(enabled) {
+        val window = (view.context as? Activity)?.window
+        if (enabled) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
 }
