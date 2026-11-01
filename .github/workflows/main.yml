@@ -1,5 +1,11 @@
 name: Compile Python
-on: [push]
+# This inherited workflow has never passed on the fork, and it runs on windows-latest;
+# letting every android-only push start it is what got Actions disabled for wasted compute.
+on:
+  push:
+    paths-ignore:
+      - 'android/**'
+      - '.github/workflows/**'
 jobs:
   pyinstaller-build:
     runs-on: windows-latest

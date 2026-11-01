@@ -10,6 +10,9 @@ permissions:
 
 jobs:
   close-inactive-issues:
+    # The script below names upstream's owner/repo, so a dispatch here would close other
+    # people's issues; only the upstream repository may run it.
+    if: github.repository == 'jianchang512/pyvideotrans'
     runs-on: ubuntu-latest
 
     steps:
