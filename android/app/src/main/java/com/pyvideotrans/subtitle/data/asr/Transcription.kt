@@ -1,6 +1,18 @@
 package com.pyvideotrans.subtitle.data.asr
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+
+/**
+ * Recognition results travel two ways: into the job archive and across the NPU process
+ * boundary. kotlinx omits a field that still holds its default value, and `pre_segmented`
+ * defaults to false — so without writing defaults out, whoever reads the result back would
+ * re-merge subtitle cues the engine already cut on real word timestamps.
+ */
+internal val asrResultJson = Json {
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+}
 
 @Serializable
 data class TranscriptionSegment(

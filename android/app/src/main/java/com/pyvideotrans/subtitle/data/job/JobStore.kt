@@ -1,9 +1,9 @@
 package com.pyvideotrans.subtitle.data.job
 
 import com.pyvideotrans.subtitle.data.asr.TranscriptionResult
+import com.pyvideotrans.subtitle.data.asr.asrResultJson
 import com.pyvideotrans.subtitle.util.LogBus
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import java.io.File
 
 /**
@@ -26,7 +26,7 @@ data class JobRecord(
 object JobStore {
     const val TRANSCRIPTION_NAME = "transcription.json"
     private const val CHECKPOINT_NAME = "checkpoint.json"
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = asrResultJson
 
     /** A checkpoint is convenience, never a reason to lose a completed recognition run. */
     fun writeTranscription(jobDir: File, result: TranscriptionResult): File? = runCatching {

@@ -13,7 +13,6 @@ import android.util.Log
 import com.pyvideotrans.subtitle.data.model.QnnModelFiles
 import com.pyvideotrans.subtitle.data.model.QnnSenseVoiceFiles
 import kotlinx.coroutines.CancellationException
-import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.concurrent.Executors
 
@@ -295,6 +294,7 @@ class QnnAsrService : Service() {
 
     private companion object {
         const val TAG = "QnnAsrService"
-        val json = Json { ignoreUnknownKeys = true }
+
+        val json = asrResultJson
     }
 }
