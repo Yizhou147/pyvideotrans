@@ -118,11 +118,18 @@ class QnnSenseVoiceEngine(private val nativeLibraryDir: File) : QnnInferenceEngi
             onLog("NPU 初始化完成（${loadMs}ms），开始 VAD 分段识别")
 
             val tokens = mutableListOf<AsrToken>()
+            // VAD-chunk level results, the shape the whisper route has always produced. Kept for
+            // the run in which the model withholds word timings and this one has to fall back.
+            val rawSegments = ArrayList<TranscriptionSegment>()
+            var decodedSegments = 0
+            var silentSegments = 0
+            var timestamplessSegments = 0
+            var firstSpokenReported = false
             var detectedLanguage = ""
             var totalSamples = 0L
             var processedSamples = 0L
             var lastProgress = -1
-            var timestampWarning = false
+            var lastMilestone = 0
 
             PcmWavReader(wavFile).use { reader ->
                 totalSamples = reader.totalSamples
@@ -163,11 +170,27 @@ class QnnSenseVoiceEngine(private val nativeLibraryDir: File) : QnnInferenceEngi
                             texts += text
                             startsMs += startMs.coerceIn(baseMs, chunkEndMs)
                         }
+                        decodedSegments += 1
+                        val spoken = result.text.trim()
+                        if (spoken.isNotEmpty() && !firstSpokenReported) {
+                            firstSpokenReported = true
+                            // The one line that tells the two failures apart from the outside.
+                            onLog(
+                                "首个有声段：文本 ${spoken.length} 字，" +
+                                    "tokens ${result.tokens.size}，时间戳 ${result.timestamps.size}",
+                            )
+                        }
+                        if (spoken.isNotEmpty()) {
+                            rawSegments += TranscriptionSegment(
+                                t0 = baseMs,
+                                t1 = chunkEndMs,
+                                text = spoken,
+                            )
+                        }
                         if (texts.isEmpty()) {
-                            if (!timestampWarning) {
-                                timestampWarning = true
-                                onLog("警告：模型未返回带时间戳的分词，本次只能按段切分")
-                            }
+                            // Two different failures land here and they must not share a message:
+                            // the model heard nothing, versus it spoke but gave no word timings.
+                            if (spoken.isEmpty()) silentSegments += 1 else timestamplessSegments += 1
                             return
                         }
                         for (offset in texts.indices) {
@@ -213,6 +236,15 @@ class QnnSenseVoiceEngine(private val nativeLibraryDir: File) : QnnInferenceEngi
                     if (percent != lastProgress) {
                         lastProgress = percent
                         onProgress(percent)
+                        // Hours-long runs used to look dead in the log between the first line and
+                        // the last, which is how a single silent opening chunk read as a failure.
+                        if (percent - lastMilestone >= 10) {
+                            lastMilestone = percent / 10 * 10
+                            onLog(
+                                "NPU 进度 $lastMilestone%：已识别 $decodedSegments 段，" +
+                                    "累计 ${tokens.size} 个字/词",
+                            )
+                        }
                     }
                 }
 
@@ -222,30 +254,42 @@ class QnnSenseVoiceEngine(private val nativeLibraryDir: File) : QnnInferenceEngi
                 val audioMs = totalSamples * 1000L / SAMPLE_RATE
                 onProgress(100)
                 onLog(
-                    "NPU 分词完成：${tokens.size} 个字/词，音频 ${audioMs / 1000}s，耗时 ${elapsed / 1000}s",
+                    "NPU 分词完成：${tokens.size} 个字/词，${decodedSegments} 段" +
+                        "（静音 $silentSegments，缺时间戳 $timestamplessSegments），" +
+                        "音频 ${audioMs / 1000}s，耗时 ${elapsed / 1000}s",
                 )
 
-                val options = SubtitleOptions.forSpokenLanguage(detectedLanguage)
-                val cues = Resegmenter.resegment(tokens, options)
-                if (cues.isEmpty()) {
-                    onLog("重断句后没有留下任何字幕")
+                val finelyCut = isFinelySegmented(tokens.size, timestamplessSegments)
+                val segments = if (finelyCut) {
+                    val options = SubtitleOptions.forSpokenLanguage(detectedLanguage)
+                    val cues = Resegmenter.resegment(tokens, options)
+                    if (cues.isEmpty()) {
+                        onLog("重断句后没有留下任何字幕")
+                    } else {
+                        val durations = cues.map { it.durationMs }
+                        onLog(
+                            "重断句：${cues.size} 条，最短 ${durations.minOrNull()}ms，" +
+                                "最长 ${durations.maxOrNull()}ms",
+                        )
+                    }
+                    cues.filter { it.text.isNotBlank() && it.endMs > it.startMs }
+                        .sortedBy { it.startMs }
+                        .map { TranscriptionSegment(t0 = it.startMs, t1 = it.endMs, text = it.text) }
                 } else {
-                    val durations = cues.map { it.durationMs }
+                    // Losing the word timings must not cost the user the text as well: hand the
+                    // VAD chunks to the writer exactly as the whisper route always has.
                     onLog(
-                        "重断句：${cues.size} 条，最短 ${durations.minOrNull()}ms，" +
-                            "最长 ${durations.maxOrNull()}ms",
+                        if (tokens.isEmpty()) "本轮一个字的时刻都没拿到，退回按 VAD 段输出字幕"
+                        else "$timestamplessSegments 段没有字级时间戳，整轮退回按 VAD 段输出字幕",
                     )
+                    rawSegments.sortedBy { it.t0 }
                 }
-                val sorted = cues
-                    .filter { it.text.isNotBlank() && it.endMs > it.startMs }
-                    .sortedBy { it.startMs }
-                    .map { TranscriptionSegment(t0 = it.startMs, t1 = it.endMs, text = it.text) }
                 return TranscriptionOutcome(
                     result = TranscriptionResult(
                         language = detectedLanguage,
                         audioMs = audioMs,
-                        segments = sorted,
-                        preSegmented = true,
+                        segments = segments,
+                        preSegmented = finelyCut,
                     ),
                     elapsedMs = elapsed,
                     modelLoadMs = loadMs,
