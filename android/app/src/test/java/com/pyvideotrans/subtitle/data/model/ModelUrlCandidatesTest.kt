@@ -40,7 +40,7 @@ class ModelUrlCandidatesTest {
         val manifest = Json { ignoreUnknownKeys = true }
             .decodeFromString(ModelManifest.serializer(), text)
         val githubSpecs = manifest.models.filter { it.isQnn || it.isVadOnnx }
-        assertEquals(10, githubSpecs.size)
+        assertEquals(11, githubSpecs.size)
         githubSpecs.forEach { spec ->
             assertTrue(spec.name, spec.urls.single().startsWith("https://github.com/"))
             assertTrue(spec.name, resolveModelUrl(spec.urls.single(), "").size > 1)

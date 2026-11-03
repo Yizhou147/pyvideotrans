@@ -26,7 +26,9 @@ class ModelManifestTest {
         assertEquals(1, manifest.models.count { it.isVadOnnx })
         assertTrue(manifest.models.any { it.fileName == "ggml-large-v3-turbo-q5_0.bin" })
         assertTrue(manifest.models.any { it.fileName == "ggml-small.bin" })
-        assertEquals(9, manifest.models.count { it.isQnn })
+        assertEquals(10, manifest.models.count { it.isQnn })
+        // Only the flagship SoC has a SenseVoice context binary published.
+        assertEquals(1, manifest.models.count { it.isSenseVoice })
     }
 
     @Test
@@ -35,7 +37,7 @@ class ModelManifestTest {
         QNN_SOCS.forEach { soc ->
             val models = manifest.models.filter { it.isQnn && it.soc == soc }
             assertTrue("$soc needs NPU models", models.isNotEmpty())
-            assertEquals("$soc needs tiny/small/medium", 3, models.size)
+            assertEquals("$soc needs tiny/small/medium", 3, models.count { !it.isSenseVoice })
             models.forEach { spec ->
                 assertTrue("${spec.id} must be a .tar.bz2 archive", spec.fileName.endsWith(".tar.bz2"))
                 assertTrue(
