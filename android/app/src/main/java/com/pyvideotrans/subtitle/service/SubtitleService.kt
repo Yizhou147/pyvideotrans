@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -99,24 +100,45 @@ class SubtitleService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    override fun onTimeout(timeoutType: Int, startId: Int) {
+        // The platform caps mediaProcessing and dataSync at six hours in any 24. Saying it out
+        // loud beats the ANR the framework raises if the service is still running seconds later;
+        // the job itself lives in the application, so the run is not destroyed by this.
+        LogBus.warn(
+            "service",
+            "前台服务到达系统时长上限（类型 $timeoutType），本轮改由唤醒锁继续",
+        )
+        stopSelf()
+    }
+
     private fun startForegroundNotification(phase: String, progress: Int?) {
-        // OEM ROMs refuse some foreground-service types outright. Failing here must not take
-        // the app down with it: end the service and let the job keep running in the process.
-        runCatching {
-            ServiceCompat.startForeground(
-                this,
-                NOTIFICATION_ID,
-                buildNotification(this, phase, progress),
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
-                } else {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                },
-            )
-        }.onFailure {
-            LogBus.error("service", "无法进入前台：${it.javaClass.name}: ${it.message}")
-            stopSelf()
+        val notification = buildNotification(this, phase, progress)
+        // mediaProcessing only exists from Android 15 on; asking an older platform for it comes
+        // back as "type none" and the whole call is refused. OEM ROMs also refuse a single type
+        // outright, so try every type this service declares instead of betting on one.
+        val types = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                add(ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING)
+            }
+            add(ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         }
+        var lastError: Throwable? = null
+        for (type in types) {
+            val attempt = runCatching {
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
+            }
+            if (attempt.isSuccess) {
+                LogBus.info("service", "前台服务已建立（类型 $type）")
+                return
+            }
+            lastError = attempt.exceptionOrNull()
+            LogBus.warn(
+                "service",
+                "前台服务类型 $type 被拒：${lastError?.javaClass?.name}: ${lastError?.message}",
+            )
+        }
+        throw lastError ?: IllegalStateException("没有可用的前台服务类型")
     }
 
     companion object {

@@ -971,7 +971,10 @@ class SubtitleJob(private val app: Application) {
             "pyvideotrans:subtitle-job",
         ).apply {
             setReferenceCounted(false)
-            acquire(3L * 60L * 60L * 1000L)
+            // A lecture is longer than the timeout that used to sit here: a 3.5h video can take
+            // the whole afternoon on the NPU. Released by every exit path, and it dies with the
+            // process if one is ever missed.
+            acquire(12L * 60L * 60L * 1000L)
         }
     }
 

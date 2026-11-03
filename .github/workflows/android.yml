@@ -122,6 +122,21 @@ jobs:
             -PsigningKeyPassword="${ANDROID_KEY_PASSWORD}" \
             -PbuildId="${APK_BUILD_ID}"
 
+      - name: Report the APK's foreground service types
+        working-directory: android
+        run: |
+          set -uo pipefail
+          aapt2=$(ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools/*/aapt2 2>/dev/null | tail -1)
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          if [ -z "$aapt2" ] || [ ! -f "$apk" ]; then
+            echo "no aapt2 or no apk; skipping the manifest report"
+            exit 0
+          fi
+          # What the device actually reads back, not what the source file says.
+          "$aapt2" dump xmltree --file AndroidManifest.xml "$apk" \
+            | grep -E "foregroundServiceType|FOREGROUND_SERVICE|WAKE_LOCK|E: (service|uses-permission)" \
+            | sed -e 's/^ *//'
+
       - name: Collect artifact
         working-directory: android
         run: |
