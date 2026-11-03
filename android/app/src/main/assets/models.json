@@ -44,6 +44,21 @@
       "description": "最小体积，仅用于流程验证和低内存设备，正式字幕不建议使用。"
     },
     {
+      "id": "qnn-sm8850-sense-voice",
+      "kind": "qnn",
+      "soc": "SM8850",
+      "family": "sense-voice",
+      "name": "NPU SenseVoice 中文首选 · 8 Elite Gen 5",
+      "fileName": "sherpa-onnx-qnn-SM8850-binary-30-seconds-sense-voice-zh-en-ja-ko-yue-2025-09-09-int8.tar.bz2",
+      "sizeBytes": 165858009,
+      "sha256": "970523b490e5863905b6c1afc3703bbbad7ca921bc4356fe0089c47366a0c84d",
+      "urls": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models-qnn-binary/sherpa-onnx-qnn-SM8850-binary-30-seconds-sense-voice-zh-en-ja-ko-yue-2025-09-09-int8.tar.bz2"
+      ],
+      "license": "MIT",
+      "description": "中文首选。它给出每个字/词的真实时间戳，字幕按说话停顿和标点断句，不再按字数硬切；中文标点也比 Whisper tiny/small 规整。只支持中、英、日、韩、粤，其他语言请选 Whisper。"
+    },
+    {
       "id": "qnn-sm8850-whisper-tiny",
       "kind": "qnn",
       "soc": "SM8850",
