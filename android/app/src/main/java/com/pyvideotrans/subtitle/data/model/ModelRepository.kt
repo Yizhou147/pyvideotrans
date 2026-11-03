@@ -77,7 +77,7 @@ class ModelRepository(private val context: Context) {
     fun qnnModelDir(spec: ModelSpec): File = File(qnnModelRoot, spec.id)
 
     fun qnnFiles(spec: ModelSpec): QnnModelFiles? {
-        if (!spec.isQnn) return null
+        if (!spec.isQnn || spec.isSenseVoice) return null
         val dir = qnnModelDir(spec)
         val encoder = File(dir, "encoder.bin")
         val decoder = File(dir, "decoder.bin")
@@ -86,14 +86,30 @@ class ModelRepository(private val context: Context) {
         return QnnModelFiles(dir, encoder, decoder, tokens)
     }
 
+    fun qnnSenseVoiceFiles(spec: ModelSpec): QnnSenseVoiceFiles? {
+        if (!spec.isSenseVoice) return null
+        val dir = qnnModelDir(spec)
+        val model = File(dir, "model.bin")
+        val tokens = File(dir, "tokens.txt")
+        if (!model.isFile || !tokens.isFile) return null
+        return QnnSenseVoiceFiles(dir, model, tokens)
+    }
+
+    /** Whatever layout the bundle uses, this is the directory once it is unpacked. */
+    fun qnnBundleDir(spec: ModelSpec): File? {
+        if (!spec.isQnn) return null
+        val dir = qnnModelDir(spec)
+        return if (qnnFiles(spec) != null || qnnSenseVoiceFiles(spec) != null) dir else null
+    }
+
     fun isDownloaded(spec: ModelSpec): Boolean {
-        if (spec.isQnn) return qnnFiles(spec) != null
+        if (spec.isQnn) return qnnBundleDir(spec) != null
         val file = fileFor(spec)
         return file.isFile && file.length() == spec.sizeBytes
     }
 
     fun downloadedSize(spec: ModelSpec): Long = if (spec.isQnn) {
-        qnnFiles(spec)?.let { dirSize(it.dir) } ?: fileFor(spec).length()
+        qnnBundleDir(spec)?.let { dirSize(it) } ?: fileFor(spec).length()
     } else {
         fileFor(spec).takeIf { it.isFile }?.length() ?: 0L
     }
@@ -117,7 +133,7 @@ class ModelRepository(private val context: Context) {
         return manifest().models
             .filter { it.isQnn && it.soc.equals(soc, ignoreCase = true) }
             .mapNotNull { spec ->
-                qnnFiles(spec)?.let { LocalQnnModel(spec, it.dir) }
+                qnnBundleDir(spec)?.let { LocalQnnModel(spec, it) }
             }
     }
 
@@ -487,12 +503,19 @@ class ModelRepository(private val context: Context) {
                 }
             }
 
-            val encoder = staging.walkTopDown()
-                .firstOrNull { it.isFile && it.name == "encoder.bin" }
-                ?: throw IOException("NPU 模型归档中未找到 encoder.bin")
-            val sourceDir = encoder.parentFile
+            // Whisper bundles ship encoder.bin/decoder.bin; SenseVoice ships a single
+            // model.bin. Both keep tokens.txt beside the model they belong to.
+            val marker = if (spec.isSenseVoice) "model.bin" else "encoder.bin"
+            val anchor = staging.walkTopDown()
+                .firstOrNull { it.isFile && it.name == marker }
+                ?: throw IOException("NPU 模型归档中未找到 $marker")
+            val sourceDir = anchor.parentFile
                 ?: throw IOException("NPU 模型归档目录无效")
-            val required = listOf("encoder.bin", "decoder.bin", "tokens.txt")
+            val required = if (spec.isSenseVoice) {
+                listOf("model.bin", "tokens.txt")
+            } else {
+                listOf("encoder.bin", "decoder.bin", "tokens.txt")
+            }
             val missing = required.filterNot { File(sourceDir, it).isFile }
             if (missing.isNotEmpty()) {
                 throw IOException("NPU 模型归档缺少文件：${missing.joinToString("、")}")

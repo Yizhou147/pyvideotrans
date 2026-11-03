@@ -20,7 +20,12 @@ data class SubtitleOptions(
     /** Fragments closer than this are one sentence that was cut in half. */
     val mergeGapMs: Long = 250L,
     val cjk: Boolean = true,
-)
+) {
+    companion object {
+        /** Line width for alphabetic languages, where a "character" is a whole letter. */
+        const val LATIN_CHARS_PER_LINE = 42
+    }
+}
 
 /** Styling needed to emit ASS; mirrors the desktop app's `ass.json` defaults. */
 data class SubtitleStyle(

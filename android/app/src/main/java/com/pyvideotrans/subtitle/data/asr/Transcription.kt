@@ -15,6 +15,12 @@ data class TranscriptionResult(
     @kotlinx.serialization.SerialName("audio_ms")
     val audioMs: Long = 0L,
     val segments: List<TranscriptionSegment> = emptyList(),
+    /**
+     * True when the segments are already subtitle cues cut on word-level
+     * timestamps; the post-processing must not merge or split them again.
+     */
+    @kotlinx.serialization.SerialName("pre_segmented")
+    val preSegmented: Boolean = false,
 )
 
 data class TranscriptionOutcome(

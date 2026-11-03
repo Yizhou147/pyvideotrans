@@ -20,12 +20,12 @@ import kotlinx.coroutines.CancellationException
  * binaries call exit() inside the native library, so a crash must not take the
  * UI process down with it.
  */
-class QnnWhisperEngine(private val nativeLibraryDir: File) {
+class QnnWhisperEngine(private val nativeLibraryDir: File) : QnnInferenceEngine {
 
     @Volatile
     private var cancelled = false
 
-    fun cancel() {
+    override fun cancel() {
         cancelled = true
     }
 

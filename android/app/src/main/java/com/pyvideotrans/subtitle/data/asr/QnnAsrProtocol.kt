@@ -2,11 +2,18 @@ package com.pyvideotrans.subtitle.data.asr
 
 import kotlinx.serialization.Serializable
 
+/** Both NPU engines take the same cancellation, whatever model family is running. */
+interface QnnInferenceEngine {
+    fun cancel()
+}
+
 data class QnnRequest(
     val modelName: String,
     val encoderPath: String,
     val decoderPath: String,
     val tokensPath: String,
+    /** Non-empty for a SenseVoice bundle, whose single context binary replaces encoder/decoder. */
+    val modelBinPath: String = "",
     val vadPath: String,
     val wavPath: String,
     val resultPath: String,
@@ -36,6 +43,7 @@ internal object QnnAsrProtocol {
     const val KEY_ENCODER = "encoder"
     const val KEY_DECODER = "decoder"
     const val KEY_TOKENS = "tokens"
+    const val KEY_MODEL_BIN = "model_bin"
     const val KEY_VAD = "vad"
     const val KEY_WAV = "wav"
     const val KEY_RESULT_PATH = "result_path"

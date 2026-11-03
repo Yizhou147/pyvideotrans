@@ -162,7 +162,10 @@ class SubtitleJob(private val app: Application) {
         val qnnStatus = QnnSupport.status(app)
         val qnnModels = qnnStatus.soc?.let { modelRepository.listQnnModels(it.socModel) }.orEmpty()
         val savedQnnId = prefs.getString(KEY_QNN_MODEL_ID, null)
-        val selectedQnn = qnnModels.firstOrNull { it.spec.id == savedQnnId }
+        // An explicit pick in the model list is honoured forever; without one the
+        // best model for subtitle cutting wins as soon as it is downloaded.
+        val userPicked = prefs.getBoolean(KEY_QNN_MODEL_PICKED, false)
+        val selectedQnn = (if (userPicked) qnnModels.firstOrNull { it.spec.id == savedQnnId } else null)
             ?: qnnModels.firstOrNull { it.spec.id == preferredQnnId(qnnModels) }
             ?: qnnModels.firstOrNull()
         if (selectedQnn != null && selectedQnn.spec.id != savedQnnId) {
@@ -222,7 +225,10 @@ class SubtitleJob(private val app: Application) {
 
     fun selectQnnModel(id: String) {
         if (_state.value.running) return
-        prefs.edit().putString(KEY_QNN_MODEL_ID, id).apply()
+        prefs.edit()
+            .putString(KEY_QNN_MODEL_ID, id)
+            .putBoolean(KEY_QNN_MODEL_PICKED, true)
+            .apply()
         _state.update { it.copy(selectedQnnModelId = id) }
     }
 
@@ -321,12 +327,20 @@ class SubtitleJob(private val app: Application) {
         val options = if (chinese) {
             SubtitleOptions()
         } else {
-            SubtitleOptions(maxCharsPerLine = LATIN_CHARS_PER_LINE, cjk = false)
+            SubtitleOptions(maxCharsPerLine = SubtitleOptions.LATIN_CHARS_PER_LINE, cjk = false)
         }
-        val cues = SubtitlePostProcessor.process(
-            result.segments.map { Cue(it.t0, it.t1, it.text) },
-            options,
-        )
+        val cues = if (result.preSegmented) {
+            LogBus.info("subtitle", "NPU 已按字级时间戳断句，${result.segments.size} 条仅整理时间轴")
+            SubtitlePostProcessor.processResegmented(
+                result.segments.map { Cue(it.t0, it.t1, it.text) },
+                options,
+            )
+        } else {
+            SubtitlePostProcessor.process(
+                result.segments.map { Cue(it.t0, it.t1, it.text) },
+                options,
+            )
+        }
         if (cues.isEmpty()) {
             LogBus.warn("subtitle", "后处理之后没有留下可显示的字幕")
             return emptyList()
@@ -590,15 +604,21 @@ class SubtitleJob(private val app: Application) {
 
                 suspend fun runQnn(): TranscriptionOutcome {
                     val local = qnnModel ?: throw IllegalStateException("没有可用的 NPU 模型")
-                    val files = modelRepository.qnnFiles(local.spec)
-                        ?: throw IllegalStateException("NPU 模型文件不完整，请重新下载")
                     val vadOnnx = modelRepository.vadOnnxFile()
                         ?: throw IllegalStateException("缺少 Silero VAD ONNX 模型")
+                    val senseVoice = modelRepository.qnnSenseVoiceFiles(local.spec)
+                    val whisper = if (senseVoice == null) {
+                        modelRepository.qnnFiles(local.spec)
+                            ?: throw IllegalStateException("NPU 模型文件不完整，请重新下载")
+                    } else {
+                        null
+                    }
                     val request = QnnRequest(
                         modelName = local.spec.name,
-                        encoderPath = files.encoder.absolutePath,
-                        decoderPath = files.decoder.absolutePath,
-                        tokensPath = files.tokens.absolutePath,
+                        encoderPath = whisper?.encoder?.absolutePath.orEmpty(),
+                        decoderPath = whisper?.decoder?.absolutePath.orEmpty(),
+                        tokensPath = (senseVoice?.tokens ?: whisper?.tokens)?.absolutePath.orEmpty(),
+                        modelBinPath = senseVoice?.model?.absolutePath.orEmpty(),
                         vadPath = vadOnnx.absolutePath,
                         wavPath = wavFile.absolutePath,
                         resultPath = File(workDir, QNN_RESULT_NAME).absolutePath,
@@ -968,6 +988,9 @@ class SubtitleJob(private val app: Application) {
 
     private fun preferredQnnId(models: List<LocalQnnModel>): String? {
         if (models.isEmpty()) return null
+        // SenseVoice returns word-level timestamps, so subtitles can be cut where the
+        // speaker actually stopped; the QNN Whisper bundles cannot, whatever their size.
+        models.firstOrNull { it.spec.isSenseVoice }?.spec?.id?.let { return it }
         val activityManager = app.getSystemService(ActivityManager::class.java)
         val memoryInfo = ActivityManager.MemoryInfo().also { activityManager.getMemoryInfo(it) }
         val gib = 1024L * 1024L * 1024L
@@ -988,6 +1011,7 @@ class SubtitleJob(private val app: Application) {
         const val PREFS_NAME = "subtitle_settings"
         const val KEY_MODEL_PATH = "model_path"
         const val KEY_QNN_MODEL_ID = "qnn_model_id"
+        const val KEY_QNN_MODEL_PICKED = "qnn_model_picked"
         const val KEY_BACKEND = "asr_backend"
         const val KEY_THREADS = "threads"
         const val KEY_LANGUAGE = "language"
@@ -996,9 +1020,6 @@ class SubtitleJob(private val app: Application) {
         const val KEY_SOFT_SUBS = "soft_subtitles"
         const val KEY_OUTPUT_TREE = "output_tree"
         const val KEY_OUTPUT_NAME = "output_tree_name"
-
-        /** Latin text needs a wider line than 16 Chinese characters to stay readable. */
-        const val LATIN_CHARS_PER_LINE = 42
 
         /** MP4 carries ISO 639-2/B three-letter language codes. */
         const val SUBTITLE_LANGUAGE_TAG = "zho"

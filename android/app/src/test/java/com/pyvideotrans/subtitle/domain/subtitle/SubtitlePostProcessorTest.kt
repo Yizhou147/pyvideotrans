@@ -92,6 +92,19 @@ class SubtitlePostProcessorTest {
     }
 
     @Test
+    fun resegmentedCuesAreNeitherMergedNorSplit() {
+        val cues = listOf(Cue(0, 3_000, "第一句字幕"), Cue(3_100, 6_400, "第二句字幕"))
+
+        val result = SubtitlePostProcessor.processResegmented(cues, options)
+
+        assertEquals(2, result.size)
+        assertEquals("第一句字幕", result[0].text)
+        assertEquals("第二句字幕", result[1].text)
+        // The plain path sees a 100ms gap and welds the two sentences back together.
+        assertEquals(1, SubtitlePostProcessor.process(cues, options).size)
+    }
+
+    @Test
     fun blankAndInvertedCuesAreDropped() {
         val result = SubtitlePostProcessor.process(
             listOf(Cue(0, 1_000, "   "), Cue(5_000, 5_000, "无效")),

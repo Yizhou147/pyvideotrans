@@ -11,6 +11,7 @@ import android.os.Messenger
 import android.os.RemoteException
 import android.util.Log
 import com.pyvideotrans.subtitle.data.model.QnnModelFiles
+import com.pyvideotrans.subtitle.data.model.QnnSenseVoiceFiles
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -26,7 +27,7 @@ class QnnAsrService : Service() {
     private val messenger = Messenger(mainHandler)
 
     @Volatile
-    private var engine: QnnWhisperEngine? = null
+    private var engine: QnnInferenceEngine? = null
 
     @Volatile
     private var reply: Messenger? = null
@@ -76,6 +77,7 @@ class QnnAsrService : Service() {
             encoderPath = bundle.getString(QnnAsrProtocol.KEY_ENCODER).orEmpty(),
             decoderPath = bundle.getString(QnnAsrProtocol.KEY_DECODER).orEmpty(),
             tokensPath = bundle.getString(QnnAsrProtocol.KEY_TOKENS).orEmpty(),
+            modelBinPath = bundle.getString(QnnAsrProtocol.KEY_MODEL_BIN).orEmpty(),
             vadPath = bundle.getString(QnnAsrProtocol.KEY_VAD).orEmpty(),
             wavPath = bundle.getString(QnnAsrProtocol.KEY_WAV).orEmpty(),
             resultPath = bundle.getString(QnnAsrProtocol.KEY_RESULT_PATH).orEmpty(),
@@ -104,13 +106,17 @@ class QnnAsrService : Service() {
         if (!status.ready) {
             return "NPU 不可用：${status.reason()}"
         }
-        val required = listOf(
-            request.encoderPath,
-            request.decoderPath,
-            request.tokensPath,
-            request.vadPath,
-            request.wavPath,
-        )
+        val required = if (request.modelBinPath.isNotBlank()) {
+            listOf(request.modelBinPath, request.tokensPath, request.vadPath, request.wavPath)
+        } else {
+            listOf(
+                request.encoderPath,
+                request.decoderPath,
+                request.tokensPath,
+                request.vadPath,
+                request.wavPath,
+            )
+        }
         val missing = required.firstOrNull { !File(it).isFile }
         if (missing != null) {
             return "NPU 模型或音频文件不存在：$missing"
@@ -124,29 +130,52 @@ class QnnAsrService : Service() {
     private fun runJob(request: QnnRequest) {
         val nativeDir = File(applicationInfo.nativeLibraryDir)
         collectNativeDiagnostics(nativeDir)
-        val activeEngine = QnnWhisperEngine(nativeDir)
+        // A model.bin in the request means the SenseVoice family: one context
+        // binary instead of encoder+decoder, and word-level timestamps out.
+        val senseVoice = if (request.modelBinPath.isNotBlank()) QnnSenseVoiceEngine(nativeDir) else null
+        val whisper = if (senseVoice == null) QnnWhisperEngine(nativeDir) else null
+        val activeEngine: QnnInferenceEngine = senseVoice ?: whisper!!
         engine = activeEngine
         try {
             sendLog("NPU 任务开始：${request.modelName.ifBlank { "Whisper" }}")
             val encoder = File(request.encoderPath)
-            val files = QnnModelFiles(
-                dir = encoder.parentFile ?: nativeDir,
-                encoder = encoder,
-                decoder = File(request.decoderPath),
-                tokens = File(request.tokensPath),
-            )
-            val outcome = activeEngine.transcribe(
-                files = files,
-                vadOnnx = File(request.vadPath),
-                wavFile = File(request.wavPath),
-                language = request.language,
-                threads = request.threads,
-                onProgress = { percent -> sendProgress(percent) },
-                onLog = { line ->
-                    Log.i(TAG, line)
-                    sendLog(line)
-                },
-            )
+            val modelBin = File(request.modelBinPath)
+            val outcome = if (senseVoice != null) {
+                senseVoice.transcribe(
+                    files = QnnSenseVoiceFiles(
+                        dir = modelBin.parentFile ?: nativeDir,
+                        model = modelBin,
+                        tokens = File(request.tokensPath),
+                    ),
+                    vadOnnx = File(request.vadPath),
+                    wavFile = File(request.wavPath),
+                    language = request.language,
+                    threads = request.threads,
+                    onProgress = { percent -> sendProgress(percent) },
+                    onLog = { line ->
+                        Log.i(TAG, line)
+                        sendLog(line)
+                    },
+                )
+            } else {
+                checkNotNull(whisper).transcribe(
+                    files = QnnModelFiles(
+                        dir = encoder.parentFile ?: nativeDir,
+                        encoder = encoder,
+                        decoder = File(request.decoderPath),
+                        tokens = File(request.tokensPath),
+                    ),
+                    vadOnnx = File(request.vadPath),
+                    wavFile = File(request.wavPath),
+                    language = request.language,
+                    threads = request.threads,
+                    onProgress = { percent -> sendProgress(percent) },
+                    onLog = { line ->
+                        Log.i(TAG, line)
+                        sendLog(line)
+                    },
+                )
+            }
 
             val payload = QnnResultPayload(
                 result = outcome.result,

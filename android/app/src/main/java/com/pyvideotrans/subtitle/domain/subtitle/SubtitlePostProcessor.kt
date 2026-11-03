@@ -33,6 +33,21 @@ object SubtitlePostProcessor {
     }
 
     /**
+     * Cues that already carry word-level timing and were cut by [Resegmenter]: merging
+     * and length-based splitting would undo those cuts, so only the timeline is
+     * tidied and the text is wrapped for display.
+     */
+    fun processResegmented(cues: List<Cue>, options: SubtitleOptions): List<Cue> {
+        val cleaned = cues
+            .map { it.copy(text = normalize(it.text)) }
+            .filter { it.text.isNotEmpty() && it.endMs > it.startMs }
+            .sortedWith(compareBy({ it.startMs }, { it.endMs }))
+        return fixTimeline(cleaned, options)
+            .map { it.copy(text = CjkWrapper.wrap(it.text, options.maxCharsPerLine, options.maxLines, options.cjk)) }
+            .filter { it.text.isNotEmpty() }
+    }
+
+    /**
      * Collapses the hard line breaks the recogniser emits into one sentence. A Chinese
      * break is a display artefact and disappears; a Latin one was a word boundary, so a
      * space takes its place.
