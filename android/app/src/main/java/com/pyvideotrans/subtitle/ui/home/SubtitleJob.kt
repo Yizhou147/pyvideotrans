@@ -324,7 +324,12 @@ class SubtitleJob(private val app: Application) {
         softSubs: Boolean,
         outputTree: Uri?,
     ): List<OutputItem> {
-        val options = if (chinese) {
+        // Resegmented cues were already cut against a line budget chosen in the NPU
+        // process, so the wrapping here has to use the same rule: the language that was
+        // actually spoken decides, not what the user asked for.
+        val options = if (result.preSegmented) {
+            SubtitleOptions.forSpokenLanguage(result.language)
+        } else if (chinese) {
             SubtitleOptions()
         } else {
             SubtitleOptions(maxCharsPerLine = SubtitleOptions.LATIN_CHARS_PER_LINE, cjk = false)

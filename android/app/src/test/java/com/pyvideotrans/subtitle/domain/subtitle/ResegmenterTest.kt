@@ -2,6 +2,7 @@ package com.pyvideotrans.subtitle.domain.subtitle
 
 import com.pyvideotrans.subtitle.domain.model.SubtitleOptions
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -137,6 +138,18 @@ class ResegmenterTest {
     fun blankTokensYieldNoCues() {
         assertTrue(Resegmenter.resegment(emptyList(), cjkOptions).isEmpty())
         assertTrue(Resegmenter.resegment(listOf(AsrToken("   ", 0, 1_000)), cjkOptions).isEmpty())
+    }
+
+    /** The NPU process cuts with this budget and the writer wraps with it: one rule, no drift. */
+    @Test
+    fun lineBudgetFollowsTheSpokenLanguage() {
+        assertEquals(16, SubtitleOptions.forSpokenLanguage("zh").maxCharsPerLine)
+        assertEquals(16, SubtitleOptions.forSpokenLanguage("zh-tw").maxCharsPerLine)
+        assertEquals(16, SubtitleOptions.forSpokenLanguage("").maxCharsPerLine)
+        assertTrue(SubtitleOptions.forSpokenLanguage("ja").cjk)
+        assertTrue(SubtitleOptions.forSpokenLanguage("yue").cjk)
+        assertEquals(42, SubtitleOptions.forSpokenLanguage("en").maxCharsPerLine)
+        assertFalse(SubtitleOptions.forSpokenLanguage("fr").cjk)
     }
 
     /** Builds a token stream the way a recogniser does: one token after another, optionally paused. */

@@ -24,6 +24,23 @@ data class SubtitleOptions(
     companion object {
         /** Line width for alphabetic languages, where a "character" is a whole letter. */
         const val LATIN_CHARS_PER_LINE = 42
+
+        /** Languages written without spaces between words; tokens join directly. */
+        val NO_SPACE_LANGS = setOf("ja", "ko", "yue", "km", "th")
+
+        /**
+         * The one place that says how wide a line is for a language. The NPU engine cuts
+         * cues with it and the writer wraps with it, so the two can never disagree.
+         */
+        fun forSpokenLanguage(language: String): SubtitleOptions {
+            val lower = language.lowercase()
+            val noSpace = lower.isBlank() || lower.startsWith("zh") || lower in NO_SPACE_LANGS
+            return if (noSpace) {
+                SubtitleOptions()
+            } else {
+                SubtitleOptions(maxCharsPerLine = LATIN_CHARS_PER_LINE, cjk = false)
+            }
+        }
     }
 }
 

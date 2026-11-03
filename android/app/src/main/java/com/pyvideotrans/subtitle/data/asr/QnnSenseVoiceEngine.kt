@@ -225,12 +225,7 @@ class QnnSenseVoiceEngine(private val nativeLibraryDir: File) : QnnInferenceEngi
                     "NPU 分词完成：${tokens.size} 个字/词，音频 ${audioMs / 1000}s，耗时 ${elapsed / 1000}s",
                 )
 
-                val cjk = detectedLanguage.isEmpty() || detectedLanguage in NO_SPACE_LANGS
-                val options = if (cjk) {
-                    SubtitleOptions()
-                } else {
-                    SubtitleOptions(maxCharsPerLine = SubtitleOptions.LATIN_CHARS_PER_LINE, cjk = false)
-                }
+                val options = SubtitleOptions.forSpokenLanguage(detectedLanguage)
                 val cues = Resegmenter.resegment(tokens, options)
                 if (cues.isEmpty()) {
                     onLog("重断句后没有留下任何字幕")
@@ -283,8 +278,5 @@ class QnnSenseVoiceEngine(private val nativeLibraryDir: File) : QnnInferenceEngi
 
         /** Keep below the fixed input length of the downloaded context binary (30s). */
         const val MAX_SPEECH_SECONDS = 28.0f
-
-        /** Desktop's `no_space_langs`: these join tokens without a space. */
-        val NO_SPACE_LANGS = setOf("zh", "ja", "ko", "yue")
     }
 }
