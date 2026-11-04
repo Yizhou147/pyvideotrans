@@ -19,7 +19,7 @@ class ModelManifestTest {
     @Test
     fun manifestHasAllModelKinds() {
         val manifest = manifest()
-        assertEquals(3, manifest.version)
+        assertEquals(4, manifest.version)
         assertTrue(manifest.models.isNotEmpty())
         assertTrue(manifest.models.any { it.kind == "asr" })
         assertEquals(1, manifest.models.count { it.isVad })
@@ -29,6 +29,8 @@ class ModelManifestTest {
         assertEquals(10, manifest.models.count { it.isQnn })
         // Only the flagship SoC has a SenseVoice context binary published.
         assertEquals(1, manifest.models.count { it.isSenseVoice })
+        // SenseVoice emits no punctuation at all, so exactly one mark model exists.
+        assertEquals(1, manifest.models.count { it.isPunctuation })
     }
 
     @Test
@@ -70,7 +72,7 @@ class ModelManifestTest {
             assertTrue("${spec.id} needs a license", spec.license.isNotBlank())
             assertTrue(
                 "unexpected kind ${spec.kind}",
-                spec.kind in setOf("asr", "vad", "vad-onnx", "qnn"),
+                spec.kind in setOf("asr", "vad", "vad-onnx", "qnn", "punct"),
             )
             when (spec.kind) {
                 "qnn" -> {
@@ -82,9 +84,21 @@ class ModelManifestTest {
                         "${spec.id} needs a ModelScope mirror for mainland networks",
                         spec.urls.any { it.contains("modelscope.cn") },
                     )
+                    assertEquals("${spec.id} is used as downloaded", 0L, spec.innerSizeBytes)
                 }
                 "vad-onnx" -> {
                     assertTrue("${spec.id} must be an .onnx file", spec.fileName.endsWith(".onnx"))
+                }
+                "punct" -> {
+                    // The app unpacks one file out of the archive and runs that, so both
+                    // digests have to be in the manifest: the archive for the download,
+                    // the inner file for the import-from-PC path.
+                    assertTrue("${spec.id} must be a .tar.bz2 archive", spec.fileName.endsWith(".tar.bz2"))
+                    assertTrue("${spec.id} needs the unpacked size", spec.innerSizeBytes > spec.sizeBytes)
+                    assertTrue(
+                        "${spec.id} inner sha256 must be 64 hex chars",
+                        Regex("[0-9a-f]{64}").matches(spec.innerSha256),
+                    )
                 }
             }
         }

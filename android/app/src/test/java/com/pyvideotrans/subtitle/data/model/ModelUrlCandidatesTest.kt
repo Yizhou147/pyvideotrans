@@ -35,12 +35,12 @@ class ModelUrlCandidatesTest {
     }
 
     @Test
-    fun manifestQnnAndVadOnnxUseGithub() {
+    fun githubOnlyModelsGetAProxyCandidate() {
         val text = File("src/main/assets/models.json").readText()
         val manifest = Json { ignoreUnknownKeys = true }
             .decodeFromString(ModelManifest.serializer(), text)
-        val githubSpecs = manifest.models.filter { it.isQnn || it.isVadOnnx }
-        assertEquals(11, githubSpecs.size)
+        val githubSpecs = manifest.models.filter { it.isQnn || it.isVadOnnx || it.isPunctuation }
+        assertEquals(12, githubSpecs.size)
         githubSpecs.forEach { spec ->
             assertTrue(spec.name, spec.urls.single().startsWith("https://github.com/"))
             assertTrue(spec.name, resolveModelUrl(spec.urls.single(), "").size > 1)

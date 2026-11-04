@@ -36,6 +36,7 @@ class ModelRepository(private val context: Context) {
     val asrDir: File = File(modelRoot, "asr").apply { mkdirs() }
     val vadDir: File = File(modelRoot, "vad").apply { mkdirs() }
     val vadOnnxDir: File = File(modelRoot, "vad-onnx").apply { mkdirs() }
+    val punctDir: File = File(modelRoot, "punct").apply { mkdirs() }
     val qnnDir: File = File(modelRoot, "qnn").apply { mkdirs() }
     private val qnnArchiveDir: File = File(qnnDir, "archives").apply { mkdirs() }
     private val qnnModelRoot: File = File(qnnDir, "models").apply { mkdirs() }
@@ -68,10 +69,18 @@ class ModelRepository(private val context: Context) {
         val dir = when {
             spec.isVad -> vadDir
             spec.isVadOnnx -> vadOnnxDir
+            spec.isPunctuation -> punctDir
             spec.isQnn -> qnnArchiveDir
             else -> asrDir
         }
         return File(dir, spec.fileName)
+    }
+
+    /** The unpacked punctuation model, or null while it is missing or half-installed. */
+    fun punctuationFile(): File? {
+        val spec = manifest().models.firstOrNull { it.isPunctuation } ?: return null
+        val file = File(punctDir, PUNCT_MODEL_NAME)
+        return file.takeIf { it.isFile && it.length() == spec.innerSizeBytes }
     }
 
     fun qnnModelDir(spec: ModelSpec): File = File(qnnModelRoot, spec.id)
@@ -104,14 +113,15 @@ class ModelRepository(private val context: Context) {
 
     fun isDownloaded(spec: ModelSpec): Boolean {
         if (spec.isQnn) return qnnBundleDir(spec) != null
+        if (spec.isPunctuation) return punctuationFile() != null
         val file = fileFor(spec)
         return file.isFile && file.length() == spec.sizeBytes
     }
 
-    fun downloadedSize(spec: ModelSpec): Long = if (spec.isQnn) {
-        qnnBundleDir(spec)?.let { dirSize(it) } ?: fileFor(spec).length()
-    } else {
-        fileFor(spec).takeIf { it.isFile }?.length() ?: 0L
+    fun downloadedSize(spec: ModelSpec): Long = when {
+        spec.isQnn -> qnnBundleDir(spec)?.let { dirSize(it) } ?: fileFor(spec).length()
+        spec.isPunctuation -> punctuationFile()?.length() ?: fileFor(spec).length()
+        else -> fileFor(spec).takeIf { it.isFile }?.length() ?: 0L
     }
 
     private fun dirSize(dir: File): Long =
@@ -174,12 +184,14 @@ class ModelRepository(private val context: Context) {
         if (spec.urls.isEmpty()) {
             throw IOException("模型清单缺少下载地址")
         }
-        if (spec.isQnn) {
+        if (spec.isQnn || spec.isPunctuation) {
             val stat = StatFs(modelRoot.absolutePath)
-            val needed = spec.sizeBytes * 3
+            // Installing keeps the archive and the unpacked model on disk at the same time.
+            val needed =
+                if (spec.isQnn) spec.sizeBytes * 3 else spec.sizeBytes + spec.innerSizeBytes
             if (stat.availableBytes < needed) {
                 throw IOException(
-                    "存储空间不足：安装 NPU 模型约需 ${formatBytes(needed)}，可用 ${formatBytes(stat.availableBytes)}",
+                    "存储空间不足：安装该模型约需 ${formatBytes(needed)}，可用 ${formatBytes(stat.availableBytes)}",
                 )
             }
         }
@@ -193,6 +205,12 @@ class ModelRepository(private val context: Context) {
                     onPhase("校验并解压 NPU 模型")
                     installQnn(spec)
                     return@withContext qnnModelDir(spec)
+                }
+                if (spec.isPunctuation) {
+                    onPhase("校验并解压标点模型")
+                    installPunctuation(spec)
+                    return@withContext punctuationFile()
+                        ?: throw IOException("标点模型解压后大小不符，请重新下载")
                 }
                 return@withContext fileFor(spec)
             } catch (ce: CancellationException) {
@@ -424,6 +442,97 @@ class ModelRepository(private val context: Context) {
         qnnModelDir(spec)
     }
 
+    /**
+     * The punctuation download ships as an archive but sherpa wants the single ONNX
+     * file inside it, so the copy is verified, moved out, and the archive deleted:
+     * 64 MB of tarball is not worth keeping on a phone once it is installed.
+     */
+    suspend fun installPunctuation(spec: ModelSpec): File = withContext(Dispatchers.IO) {
+        if (!spec.isPunctuation) throw IOException("${spec.name} 不是标点模型")
+        punctuationFile()?.let { return@withContext it }
+
+        val archive = fileFor(spec)
+        if (!archive.isFile) {
+            throw IOException("标点模型归档不存在，请下载 ${spec.fileName}")
+        }
+        if (archive.length() != spec.sizeBytes) {
+            throw IOException(
+                "标点模型归档大小不匹配：期望 ${formatBytes(spec.sizeBytes)}，实际 ${formatBytes(archive.length())}",
+            )
+        }
+        if (!sha256(archive).equals(spec.sha256, ignoreCase = true)) {
+            archive.delete()
+            throw IOException("标点模型归档 SHA-256 校验失败，请重新下载")
+        }
+
+        extractPunctuationModel(spec, archive)
+        archive.delete()
+        val installed = punctuationFile()
+            ?: throw IOException("标点模型归档中没有可用的 $PUNCT_MODEL_NAME")
+        LogBus.info("model", "已安装标点模型 (${formatBytes(installed.length())})")
+        installed
+    }
+
+    private suspend fun extractPunctuationModel(spec: ModelSpec, archive: File) {
+        val staging = File(punctDir, ".extract-${System.nanoTime()}").apply { mkdirs() }
+        val output = File(staging, PUNCT_MODEL_NAME)
+        try {
+            BZip2CompressorInputStream(archive.inputStream().buffered(), true).use { bzip ->
+                TarArchiveInputStream(bzip).use { tar ->
+                    while (true) {
+                        val entry = tar.nextTarEntry ?: break
+                        if (!entry.isFile) continue
+                        if (entry.name.split('/').any { it == ".." }) {
+                            throw IOException("标点模型归档包含非法路径：${entry.name}")
+                        }
+                        if (entry.name.substringAfterLast('/') != PUNCT_MODEL_NAME) continue
+                        if (entry.size != spec.innerSizeBytes) {
+                            throw IOException(
+                                "标点模型大小不匹配：清单期望 ${formatBytes(spec.innerSizeBytes)}，" +
+                                    "归档内是 ${formatBytes(entry.size)}",
+                            )
+                        }
+                        output.outputStream().buffered().use { sink -> tar.copyTo(sink) }
+                        break
+                    }
+                }
+            }
+            if (!output.isFile) throw IOException("标点模型归档中未找到 $PUNCT_MODEL_NAME")
+            if (!sha256(output).equals(spec.innerSha256, ignoreCase = true)) {
+                throw IOException("标点模型内容校验失败，归档可能与清单不是同一版本")
+            }
+            moveIntoPlace(output, File(punctDir, PUNCT_MODEL_NAME))
+        } finally {
+            staging.deleteRecursively()
+        }
+    }
+
+    suspend fun importPunctuation(uri: Uri): File = withContext(Dispatchers.IO) {
+        val spec = manifest().models.firstOrNull { it.isPunctuation }
+            ?: throw IOException("模型清单中未配置标点模型")
+        val temp = File(punctDir, ".import-${System.nanoTime()}.onnx")
+
+        try {
+            copyUriTo(uri, temp)
+            if (temp.length() != spec.innerSizeBytes) {
+                throw IOException(
+                    "标点模型大小异常：应为 ${formatBytes(spec.innerSizeBytes)}，" +
+                        "实际 ${formatBytes(temp.length())}。请选择解压出来的 model.int8.onnx",
+                )
+            }
+            val digest = sha256(temp)
+            if (!digest.equals(spec.innerSha256, ignoreCase = true)) {
+                throw IOException("SHA-256 与清单不匹配，不是受支持的 ct-transformer 标点模型")
+            }
+            val target = File(punctDir, PUNCT_MODEL_NAME)
+            Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            LogBus.info("model", "已导入标点模型 (${formatBytes(target.length())})")
+            target
+        } finally {
+            if (temp.exists()) temp.delete()
+        }
+    }
+
     suspend fun importQnn(uri: Uri): ModelSpec = withContext(Dispatchers.IO) {
         val displayName = sanitizeFileName(queryDisplayName(uri))
         val specs = manifest().models.filter { it.isQnn }
@@ -571,7 +680,11 @@ class ModelRepository(private val context: Context) {
         val target = fileFor(spec)
         val part = File(target.parentFile, "${target.name}.part")
         part.delete()
-        val deleted = target.delete()
+        // For a punctuation model the archive is gone after install, so the file that
+        // is actually on disk is the unpacked one.
+        val unpackedRemoved =
+            if (spec.isPunctuation) File(punctDir, PUNCT_MODEL_NAME).delete() else false
+        val deleted = target.delete() || unpackedRemoved
         if (deleted) {
             LogBus.info("model", "已删除 ${spec.name}")
         }
@@ -638,6 +751,9 @@ class ModelRepository(private val context: Context) {
         const val MAX_QNN_EXTRACTED_BYTES = 6L * 1024 * 1024 * 1024
         const val PREFS_NAME = "model_prefs"
         const val KEY_MIRROR_PREFIX = "mirror_prefix"
+
+        /** Name sherpa-onnx expects for the ct-transformer punctuation model. */
+        const val PUNCT_MODEL_NAME = "model.int8.onnx"
     }
 }
 

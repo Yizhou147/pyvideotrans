@@ -47,6 +47,9 @@ class ModelsViewModel(application: Application) : AndroidViewModel(application) 
     private val _onnxVadReady = MutableStateFlow(false)
     val onnxVadReady: StateFlow<Boolean> = _onnxVadReady.asStateFlow()
 
+    private val _punctReady = MutableStateFlow(false)
+    val punctReady: StateFlow<Boolean> = _punctReady.asStateFlow()
+
     private val _qnnInstalledIds = MutableStateFlow<Set<String>>(emptySet())
     val qnnInstalledIds: StateFlow<Set<String>> = _qnnInstalledIds.asStateFlow()
 
@@ -87,6 +90,7 @@ class ModelsViewModel(application: Application) : AndroidViewModel(application) 
         _models.value = repository.listAsrModels()
         _vadReady.value = repository.vadFile() != null
         _onnxVadReady.value = repository.vadOnnxFile() != null
+        _punctReady.value = repository.punctuationFile() != null
         _qnnInstalledIds.value = manifest.models
             .filter { it.isQnn && repository.isDownloaded(it) }
             .map { it.id }
@@ -230,6 +234,24 @@ class ModelsViewModel(application: Application) : AndroidViewModel(application) 
             } catch (t: Throwable) {
                 _message.value = t.message ?: "Silero VAD ONNX 导入失败"
                 LogBus.error("model", "Silero VAD ONNX 导入失败：${t.message}")
+            } finally {
+                _importingVad.value = false
+            }
+        }
+    }
+
+    fun importPunctuation(uri: Uri) {
+        if (_importingVad.value) return
+        _importingVad.value = true
+        _message.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val file = repository.importPunctuation(uri)
+                _message.value = "已导入标点模型：${file.name}"
+                refresh()
+            } catch (t: Throwable) {
+                _message.value = t.message ?: "标点模型导入失败"
+                LogBus.error("model", "标点模型导入失败：${t.message}")
             } finally {
                 _importingVad.value = false
             }

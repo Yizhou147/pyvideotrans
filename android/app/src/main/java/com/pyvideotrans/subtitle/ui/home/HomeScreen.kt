@@ -728,6 +728,23 @@ private fun NpuSettings(
                     )
                 }
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Badge(
+                        text = if (state.punctReady) "标点模型 已就绪" else "标点模型 未下载",
+                        color = if (state.punctReady) PtAccent else PtWarning,
+                    )
+                    Text(
+                        text = if (state.punctReady) "字幕按逗号、句号断句"
+                        else "SenseVoice 不输出标点，缺它只能按字数断句",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = PtMuted,
+                    )
+                }
+
                 Text(
                     text = "NPU 使用预编译 Whisper context，由 Hexagon HTP 执行；自动模式下若 NPU 初始化或推理失败，会回退 Vulkan / CPU。",
                     style = MaterialTheme.typography.labelSmall,

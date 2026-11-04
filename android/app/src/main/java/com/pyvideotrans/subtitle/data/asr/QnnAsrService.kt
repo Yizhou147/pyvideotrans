@@ -77,6 +77,7 @@ class QnnAsrService : Service() {
             decoderPath = bundle.getString(QnnAsrProtocol.KEY_DECODER).orEmpty(),
             tokensPath = bundle.getString(QnnAsrProtocol.KEY_TOKENS).orEmpty(),
             modelBinPath = bundle.getString(QnnAsrProtocol.KEY_MODEL_BIN).orEmpty(),
+            punctPath = bundle.getString(QnnAsrProtocol.KEY_PUNCT).orEmpty(),
             vadPath = bundle.getString(QnnAsrProtocol.KEY_VAD).orEmpty(),
             wavPath = bundle.getString(QnnAsrProtocol.KEY_WAV).orEmpty(),
             resultPath = bundle.getString(QnnAsrProtocol.KEY_RESULT_PATH).orEmpty(),
@@ -116,7 +117,9 @@ class QnnAsrService : Service() {
                 request.wavPath,
             )
         }
-        val missing = required.firstOrNull { !File(it).isFile }
+        val missing = (required + request.punctPath)
+            .filter { it.isNotBlank() }
+            .firstOrNull { !File(it).isFile }
         if (missing != null) {
             return "NPU 模型或音频文件不存在：$missing"
         }
@@ -147,6 +150,7 @@ class QnnAsrService : Service() {
                         tokens = File(request.tokensPath),
                     ),
                     vadOnnx = File(request.vadPath),
+                    punctOnnx = request.punctPath.takeIf { it.isNotBlank() }?.let(::File),
                     wavFile = File(request.wavPath),
                     language = request.language,
                     threads = request.threads,

@@ -74,6 +74,8 @@ data class HomeUiState(
     val selectedQnnModelId: String? = null,
     val qnnStatus: QnnStatus? = null,
     val onnxVadReady: Boolean = false,
+    /** Optional: SenseVoice gives no punctuation without it, and sentences get cut by counting. */
+    val punctReady: Boolean = false,
     val backend: AsrBackend = AsrBackend.AUTO,
     val vadReady: Boolean = false,
     val threads: Int = 4,
@@ -184,6 +186,7 @@ class SubtitleJob(private val app: Application) {
                 selectedQnnModelId = selectedQnn?.spec?.id,
                 qnnStatus = qnnStatus,
                 onnxVadReady = modelRepository.vadOnnxFile() != null,
+                punctReady = modelRepository.punctuationFile() != null,
                 backend = backend,
                 vadReady = modelRepository.vadFile() != null,
                 threads = prefs.getInt(KEY_THREADS, DEFAULT_THREADS).coerceIn(1, 8),
@@ -618,12 +621,22 @@ class SubtitleJob(private val app: Application) {
                     } else {
                         null
                     }
+                    // SenseVoice is the one backend that emits no punctuation at all; without the
+                    // marks there is nothing for the resegmenter to cut on but character counts.
+                    val punct = senseVoice?.let { modelRepository.punctuationFile() }
+                    if (senseVoice != null && punct == null) {
+                        LogBus.warn(
+                            "npu",
+                            "未安装中文标点模型，字幕只能按字数断句，建议在“模型管理”里下载",
+                        )
+                    }
                     val request = QnnRequest(
                         modelName = local.spec.name,
                         encoderPath = whisper?.encoder?.absolutePath.orEmpty(),
                         decoderPath = whisper?.decoder?.absolutePath.orEmpty(),
                         tokensPath = (senseVoice?.tokens ?: whisper?.tokens)?.absolutePath.orEmpty(),
                         modelBinPath = senseVoice?.model?.absolutePath.orEmpty(),
+                        punctPath = punct?.absolutePath.orEmpty(),
                         vadPath = vadOnnx.absolutePath,
                         wavPath = wavFile.absolutePath,
                         resultPath = File(workDir, QNN_RESULT_NAME).absolutePath,

@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "models": [
     {
       "id": "whisper-large-v3-turbo-q5_0",
@@ -210,6 +210,21 @@
       ],
       "license": "MIT",
       "description": "NPU 识别使用的语音分段模型。NPU 模式必须安装，用于把长音频切成 30 秒以内的片段。"
+    },
+    {
+      "id": "punct-ct-transformer-zh-en-int8",
+      "kind": "punct",
+      "name": "中文标点恢复 ct-transformer INT8",
+      "fileName": "sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8.tar.bz2",
+      "sizeBytes": 64717756,
+      "sha256": "c0d5aa5f8eeb686032345e180bedf39319dc2e0556781c6264bcadba8328a6e1",
+      "innerSizeBytes": 75519198,
+      "innerSha256": "65a3fb9f5ad7bfb96bf69e0dc4481df97f6ee60513c1d94ce981ba6effd524b1",
+      "urls": [
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12-int8.tar.bz2"
+      ],
+      "license": "Apache-2.0",
+      "description": "NPU 的 SenseVoice 不输出标点，装上它才能按逗号句号断句。强烈建议安装，缺标点时字幕会挤成整块。"
     }
   ]
 }

@@ -96,6 +96,50 @@ class ResegmenterTest {
         assertEquals(7_600L, cues[0].durationMs)
     }
 
+    /**
+     * A cut the character budget asked for has no claim on being where the sentence
+     * ended, so it steps back to the last clause particle instead of slicing through
+     * the words.
+     */
+    @Test
+    fun aCountedCutStepsBackToTheLastClauseParticle() {
+        val stream = TokenStream()
+            .addMany(22, "字")
+            .add("吧")
+            .addMany(30, "字")
+
+        val cues = Resegmenter.resegment(stream.tokens(), cjkOptions)
+
+        assertTrue(cues.isNotEmpty())
+        assertEquals("字".repeat(22) + "吧", cues[0].text)
+        assertTrue("the head must not overrun the budget: ${cues[0].text.length}", cues[0].text.length <= 32)
+    }
+
+    /**
+     * A spoken number may overrun the budget, but not without limit: past the ceiling
+     * the cue keeps its shape and the digit run loses one character.
+     */
+    @Test
+    fun aNumberRunOverrunsTheBudgetButStopsAtTheCeiling() {
+        val stream = TokenStream()
+            .addMany(20, "字")
+            .addMany(60, "7")
+            .addMany(20, "字")
+
+        val cues = Resegmenter.resegment(stream.tokens(), cjkOptions)
+
+        assertTrue(cues.isNotEmpty())
+        assertTrue(
+            "no cue may pass budget plus ceiling: ${cues.maxOf { it.text.length }}",
+            cues.all { it.text.length <= 32 + 12 },
+        )
+        assertTrue(
+            "a number is allowed past the plain budget: ${cues.map { it.text.length }}",
+            cues.any { it.text.length > 32 },
+        )
+        assertEquals(100, cues.joinToString("") { it.text }.length)
+    }
+
     @Test
     fun latinTokensLoseTheBpeMarkerAndKeepTheirSpaces() {
         val stream = TokenStream()

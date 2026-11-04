@@ -152,6 +152,7 @@ class QnnRemoteClient(private val context: Context) {
                         putString(QnnAsrProtocol.KEY_DECODER, request.decoderPath)
                         putString(QnnAsrProtocol.KEY_TOKENS, request.tokensPath)
                         putString(QnnAsrProtocol.KEY_MODEL_BIN, request.modelBinPath)
+                        putString(QnnAsrProtocol.KEY_PUNCT, request.punctPath)
                         putString(QnnAsrProtocol.KEY_VAD, request.vadPath)
                         putString(QnnAsrProtocol.KEY_WAV, request.wavPath)
                         putString(QnnAsrProtocol.KEY_RESULT_PATH, request.resultPath)

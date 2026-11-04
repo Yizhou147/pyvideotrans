@@ -63,6 +63,7 @@ fun ModelsScreen(
     val downloads by viewModel.downloads.collectAsState()
     val vadReady by viewModel.vadReady.collectAsState()
     val onnxVadReady by viewModel.onnxVadReady.collectAsState()
+    val punctReady by viewModel.punctReady.collectAsState()
     val qnnInstalledIds by viewModel.qnnInstalledIds.collectAsState()
     val importing by viewModel.importing.collectAsState()
     val importingVad by viewModel.importingVad.collectAsState()
@@ -79,6 +80,9 @@ fun ModelsScreen(
     }
     val vadOnnxImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.importVadOnnx(uri)
+    }
+    val punctImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.importPunctuation(uri)
     }
     val qnnImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.importQnn(uri)
@@ -264,6 +268,44 @@ fun ModelsScreen(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(if (importingVad) "正在导入 VAD ONNX…" else "从文件导入 Silero VAD ONNX")
+                        }
+                    }
+
+                    SectionDivider()
+                    Text(
+                        text = "NPU 的 SenseVoice 不输出任何标点，字幕就只能按字数硬切、句子从中间断开。" +
+                            "装上标点模型（约 62 MB，只在 CPU 上跑一次）后按逗号句号断句。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = PtMuted,
+                    )
+                    val punctSpec = viewModel.manifest.models.firstOrNull { it.isPunctuation }
+                    if (punctSpec == null) {
+                        Text(
+                            text = "模型清单中未配置标点模型。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = PtError,
+                        )
+                    } else {
+                        ManifestModelRow(
+                            spec = punctSpec,
+                            installed = punctReady,
+                            download = downloads[punctSpec.id],
+                            onDownload = { viewModel.download(punctSpec) },
+                            onCancel = { viewModel.cancelDownload(punctSpec) },
+                            onDelete = {
+                                pendingDelete = PendingDelete(punctSpec.name) { viewModel.delete(punctSpec) }
+                            },
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                punctImporter.launch(
+                                    arrayOf("application/octet-stream", "application/x-onnx", "*/*"),
+                                )
+                            },
+                            enabled = !importingVad,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(if (importingVad) "正在导入标点模型…" else "从文件导入标点模型（model.int8.onnx）")
                         }
                     }
                 }

@@ -14,6 +14,8 @@ data class QnnRequest(
     val tokensPath: String,
     /** Non-empty for a SenseVoice bundle, whose single context binary replaces encoder/decoder. */
     val modelBinPath: String = "",
+    /** Punctuation model, empty when none is installed. SenseVoice emits no marks at all. */
+    val punctPath: String = "",
     val vadPath: String,
     val wavPath: String,
     val resultPath: String,
@@ -44,6 +46,7 @@ internal object QnnAsrProtocol {
     const val KEY_DECODER = "decoder"
     const val KEY_TOKENS = "tokens"
     const val KEY_MODEL_BIN = "model_bin"
+    const val KEY_PUNCT = "punct"
     const val KEY_VAD = "vad"
     const val KEY_WAV = "wav"
     const val KEY_RESULT_PATH = "result_path"

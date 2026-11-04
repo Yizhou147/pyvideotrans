@@ -34,14 +34,18 @@ object SubtitlePostProcessor {
 
     /**
      * Cues that already carry word-level timing and were cut by [Resegmenter]: merging
-     * and length-based splitting would undo those cuts, so only the timeline is
-     * tidied and the text is wrapped for display.
+     * and length-based splitting would undo those cuts, so the timeline is tidied, the
+     * text is wrapped for display, and the one rule the resegmenter cannot enforce from
+     * the audio alone — a subtitle must not stay up longer than it can be read — is
+     * applied as a ceiling instead of as a reason to split.
      */
     fun processResegmented(cues: List<Cue>, options: SubtitleOptions): List<Cue> {
         val cleaned = cues
             .map { it.copy(text = normalize(it.text)) }
             .filter { it.text.isNotEmpty() && it.endMs > it.startMs }
             .sortedWith(compareBy({ it.startMs }, { it.endMs }))
+            .map { it.copy(endMs = minOf(it.endMs, it.startMs + options.maxDurationMs)) }
+            .filter { it.endMs > it.startMs }
         return fixTimeline(cleaned, options)
             .map { it.copy(text = CjkWrapper.wrap(it.text, options.maxCharsPerLine, options.maxLines, options.cjk)) }
             .filter { it.text.isNotEmpty() }

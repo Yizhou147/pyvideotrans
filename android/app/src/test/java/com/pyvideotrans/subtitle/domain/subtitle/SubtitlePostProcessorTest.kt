@@ -104,6 +104,22 @@ class SubtitlePostProcessorTest {
         assertEquals(1, SubtitlePostProcessor.process(cues, options).size)
     }
 
+    /**
+     * The resegmenter cuts where the speech stops and cannot know the reading limit, so
+     * the ceiling is applied here: a shortened display window, never a reason to split
+     * the sentence by counting characters again.
+     */
+    @Test
+    fun aResegmentedCueIsNotAllowedToStayUpPastTheReadingLimit() {
+        val cue = Cue(0, 12_000, "这是一句按语音切出来的长字幕，不要拆")
+
+        val result = SubtitlePostProcessor.processResegmented(listOf(cue), options)
+
+        assertEquals(1, result.size)
+        assertEquals(options.maxDurationMs, result.single().endMs)
+        assertEquals(cue.text, result.single().text.replace("\n", ""))
+    }
+
     @Test
     fun blankAndInvertedCuesAreDropped() {
         val result = SubtitlePostProcessor.process(

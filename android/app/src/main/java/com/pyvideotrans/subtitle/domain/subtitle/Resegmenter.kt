@@ -21,7 +21,9 @@ data class AsrToken(
  * — punctuation first, silences second, duration last.
  *
  * The mobile twist the desktop does not need: a cue must also stay inside the
- * screen's character budget, so an over-capacity chunk forces a cut too.
+ * screen's character budget, so an over-capacity chunk forces a cut too. Counting
+ * is the weakest reason to cut, so those cuts back off to the last clause boundary
+ * and never land in the middle of a spoken number.
  */
 object Resegmenter {
 
@@ -35,10 +37,28 @@ object Resegmenter {
     private val STRONG_PUNC = charArrayOf('.', '?', '!', '。', '？', '！')
     private val WEAK_PUNC = charArrayOf(',', ';', ':', '，', '；', '：', '、')
 
+    /** Sentence-final particles: the last real clause boundary before the count ran out. */
+    private const val FINAL_PARTICLES = "啊呀哇吧呢吗嘛哦噢哈咯呗嗯呃啦"
+
+    /** A boundary further back than this does not belong to the clause being cut. */
+    private const val SOFT_LOOKBACK = 12
+
+    /** Below this the head is a fragment, not a subtitle. */
+    private const val MIN_SOFT_CHARS = 6
+
+    /** How far a spoken number may overrun the budget before it is cut anyway. */
+    private const val NUMBER_RUN_CEILING = 12
+
     private class Chunk(val start: Long) {
         val words = mutableListOf<AsrToken>()
         var end: Long = start
         var length: Int = 0
+
+        /** [length] after each token, so a back-off can restore the head's cost. */
+        var lengths = mutableListOf<Int>()
+
+        /** Last token that closes a spoken clause, or -1. */
+        var softIndex: Int = -1
     }
 
     /** Keeps the on-screen character budget in step with what [buildText] will emit. */
@@ -51,6 +71,31 @@ object Resegmenter {
         }
         length += displayed(token.text).length + gap
         words += token
+        lengths += length
+        if (endsClause(token)) softIndex = words.lastIndex
+    }
+
+    /**
+     * Cut a chunk at its last clause particle instead of at the character where the
+     * budget happened to run out. Returns the remainder, ready for the next token, or
+     * null when there is no usable boundary to move to.
+     */
+    private fun splitAtClause(chunk: Chunk, cjk: Boolean): Chunk? {
+        val soft = chunk.softIndex
+        if (soft < 0 || soft >= chunk.words.lastIndex) return null
+        if (chunk.words.lastIndex - soft > SOFT_LOOKBACK) return null
+        val headLength = chunk.lengths[soft]
+        if (headLength < MIN_SOFT_CHARS) return null
+        val tail = Chunk(chunk.words[soft + 1].startMs)
+        for (index in soft + 1..chunk.words.lastIndex) {
+            tail.grow(chunk.words[index], cjk)
+        }
+        chunk.end = chunk.words[soft].endMs
+        chunk.words.subList(soft + 1, chunk.words.size).clear()
+        chunk.length = headLength
+        chunk.lengths = ArrayList(chunk.lengths.subList(0, soft + 1))
+        chunk.softIndex = -1
+        return tail
     }
 
     fun resegment(tokens: List<AsrToken>, options: SubtitleOptions): List<Cue> {
@@ -74,9 +119,13 @@ object Resegmenter {
             val prevChunkEnd = prevEnd
 
             var shouldSplit: Boolean
+            // Did counting, rather than the audio, ask for this cut? Only those cuts are
+            // worth moving to a clause boundary; a pause or a mark is where speech ended.
+            var counted = false
             if (futureMs >= MAX_MS + rcMs && chunk.words.isNotEmpty()) {
                 // Forced cut unless this very token already ends a sentence.
                 shouldSplit = !endsSentence(token, cjk)
+                counted = shouldSplit
             } else {
                 shouldSplit = false
                 if (prev != null && prevChunkEnd != null && chunk.words.isNotEmpty()) {
@@ -100,20 +149,32 @@ object Resegmenter {
             }
             if (!shouldSplit && chunk.words.isNotEmpty()) {
                 // Mobile-only screen budget, the one rule desktop never needed. A number
-                // still may not be cut in half by it.
-                if (chunk.length + projectedAdd(token, cjk) > capacity &&
-                    !splitsNumberRun(prev, token)
-                ) {
+                // still may not be cut in half by it, but it may not stretch the cue
+                // without limit either: past the ceiling the number loses a digit rather
+                // than the whole line losing its shape.
+                val projected = chunk.length + projectedAdd(token, cjk)
+                if (projected > capacity && !splitsNumberRun(prev, token)) {
                     shouldSplit = true
+                    counted = true
+                } else if (projected > capacity + NUMBER_RUN_CEILING) {
+                    shouldSplit = true
+                    counted = true
                 }
             }
 
             if (shouldSplit && chunk.words.isNotEmpty()) {
-                chunk.end = prevChunkEnd ?: token.startMs
-                cut += chunk
-                chunk = Chunk(token.startMs)
-                chunk.grow(token, cjk)
-                current = chunk
+                val remainder = if (counted) splitAtClause(chunk, cjk) else null
+                if (remainder != null) {
+                    cut += chunk
+                    remainder.grow(token, cjk)
+                    current = remainder
+                } else {
+                    chunk.end = prevChunkEnd ?: token.startMs
+                    cut += chunk
+                    val next = Chunk(token.startMs)
+                    next.grow(token, cjk)
+                    current = next
+                }
             } else {
                 chunk.grow(token, cjk)
             }
@@ -167,13 +228,20 @@ object Resegmenter {
         endsStrong(token) || endsWeak(token, cjk)
 
     /** SenseVoice marks the start of a Latin word with the BPE separator `▁`. */
-    private fun isWordStart(text: String): Boolean = text.trimStart().startsWith("▁")
+    private fun isWordStart(text: String): Boolean = AsrTokenText.isWordStart(text)
+
+    /** A spoken clause closes on a particle even when nothing was punctuated. */
+    private fun endsClause(token: AsrToken): Boolean {
+        val text = displayed(token.text)
+        if (text.isEmpty()) return false
+        return text[text.lastIndex] in FINAL_PARTICLES
+    }
 
     /** What a token costs once `▁` is gone, plus the separator [buildText] would add. */
     private fun projectedAdd(token: AsrToken, cjk: Boolean): Int =
         displayed(token.text).length + if (!cjk || isWordStart(token.text)) 1 else 0
 
-    private fun displayed(text: String): String = text.trim().removePrefix("▁").trim()
+    private fun displayed(text: String): String = AsrTokenText.displayed(text)
 
     private fun endsWith(text: String, chars: CharArray): Boolean {
         val trimmed = text.trim()
